@@ -1,0 +1,24 @@
+[
+  {
+    "Organization": "AISAT (09e99376-031d-4982-84ba-2c252f0e9534)",
+    "Departments": [
+      {
+        "Name": "ELECTRONICS AND COMMUNICATION (ECE)",
+        "Classes": [
+          {
+            "Name": "1st Year ECE (Year 1)",
+            "Room": "A205",
+            "Devices": []
+          },
+          {
+            "Name": "ECE - Auto Class (Year 2)",
+            "Room": "Room-EC-04",
+            "Devices": [
+              "EC Classroom Reader [esp8266_rfid_02]"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

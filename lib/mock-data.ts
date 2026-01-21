@@ -1,0 +1,181 @@
+import type { User, Slot, AttendanceRecord, LeaderboardEntry, Achievement, Notification } from "./types"
+
+export const mockUsers: User[] = [
+  {
+    id: "1",
+    name: "John Doe",
+    email: "john@student.edu",
+    role: "student",
+    rfidTag: "RFID001",
+    department: "Computer Science",
+    year: 3,
+    semester: 5,
+    points: 850,
+    createdAt: new Date("2024-01-01"),
+  },
+  {
+    id: "2",
+    name: "Jane Smith",
+    email: "jane@student.edu",
+    role: "student",
+    rfidTag: "RFID002",
+    department: "Computer Science",
+    year: 3,
+    semester: 5,
+    points: 920,
+    createdAt: new Date("2024-01-01"),
+  },
+  {
+    id: "3",
+    name: "Dr. Robert Johnson",
+    email: "robert@teacher.edu",
+    role: "teacher",
+    department: "Computer Science",
+    createdAt: new Date("2023-01-01"),
+  },
+  {
+    id: "4",
+    name: "Admin User",
+    email: "admin@edu.com",
+    role: "admin",
+    createdAt: new Date("2023-01-01"),
+  },
+]
+
+export const mockSlots: Slot[] = [
+  {
+    id: "slot1",
+    name: "Data Structures",
+    courseCode: "CS301",
+    courseName: "Data Structures and Algorithms",
+    teacherId: "3",
+    day: "Monday",
+    startTime: "09:00",
+    endTime: "10:30",
+    room: "Lab A101",
+    department: "Computer Science",
+    year: 3,
+    semester: 5,
+    isActive: true,
+  },
+  {
+    id: "slot2",
+    name: "Database Systems",
+    courseCode: "CS302",
+    courseName: "Database Management Systems",
+    teacherId: "3",
+    day: "Tuesday",
+    startTime: "11:00",
+    endTime: "12:30",
+    room: "Room B202",
+    department: "Computer Science",
+    year: 3,
+    semester: 5,
+    isActive: true,
+  },
+  {
+    id: "slot3",
+    name: "Web Development",
+    courseCode: "CS303",
+    courseName: "Advanced Web Development",
+    teacherId: "3",
+    day: "Wednesday",
+    startTime: "14:00",
+    endTime: "15:30",
+    room: "Lab C303",
+    department: "Computer Science",
+    year: 3,
+    semester: 5,
+    isActive: true,
+  },
+]
+
+export const mockAttendance: AttendanceRecord[] = [
+  {
+    id: "att1",
+    studentId: "1",
+    slotId: "slot1",
+    rfidTag: "RFID001",
+    timestamp: new Date("2024-12-21T09:05:00"),
+    status: "present",
+    points: 10,
+    location: "Lab A101",
+  },
+  {
+    id: "att2",
+    studentId: "2",
+    slotId: "slot1",
+    rfidTag: "RFID002",
+    timestamp: new Date("2024-12-21T09:03:00"),
+    status: "present",
+    points: 10,
+    location: "Lab A101",
+  },
+]
+
+export const mockLeaderboard: LeaderboardEntry[] = [
+  {
+    rank: 1,
+    studentId: "2",
+    studentName: "Jane Smith",
+    points: 920,
+    attendanceRate: 95,
+    streak: 12,
+  },
+  {
+    rank: 2,
+    studentId: "1",
+    studentName: "John Doe",
+    points: 850,
+    attendanceRate: 88,
+    streak: 8,
+  },
+]
+
+export const mockAchievements: Achievement[] = [
+  {
+    id: "ach1",
+    name: "Perfect Week",
+    description: "Attend all classes for a week",
+    icon: "🎯",
+    points: 50,
+    condition: "7_day_streak",
+  },
+  {
+    id: "ach2",
+    name: "Early Bird",
+    description: "Arrive early 10 times",
+    icon: "🌅",
+    points: 30,
+    condition: "early_10",
+  },
+  {
+    id: "ach3",
+    name: "Dedication Master",
+    description: "Maintain 90% attendance",
+    icon: "🏆",
+    points: 100,
+    condition: "attendance_90",
+  },
+]
+
+export const mockNotifications: Notification[] = [
+  {
+    id: "not1",
+    userId: "1",
+    type: "attendance",
+    title: "Attendance Recorded",
+    message: "Your attendance for CS301 has been recorded",
+    read: false,
+    timestamp: new Date("2024-12-21T09:05:00"),
+  },
+  {
+    id: "not2",
+    userId: "1",
+    type: "achievement",
+    title: "Achievement Unlocked!",
+    message: 'You earned "Early Bird" achievement',
+    read: false,
+    timestamp: new Date("2024-12-20T10:00:00"),
+  },
+]
