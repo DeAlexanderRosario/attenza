@@ -84,111 +84,84 @@ export class WhatsAppService {
 
     // ---------------- MESSAGES ----------------
 
+    /**
+     * Internal robust sender to handle the 'markedUnread' error in whatsapp-web.js
+     */
+    private async safeSend(chatId: string, text: string): Promise<boolean> {
+        if (!this.isReady) {
+            console.warn("[WhatsApp] Client not ready");
+            return false;
+        }
+
+        try {
+            await this.client.sendMessage(chatId, text);
+            console.log(`✅ [WhatsApp] Message sent to ${chatId}`);
+            return true;
+        } catch (error: any) {
+            console.error(`❌ [WhatsApp] Failed to send to ${chatId}:`, error.message);
+            // If it's the 'markedUnread' error, message usually sent anyway
+            if (error.message && error.message.includes('markedUnread')) {
+                console.warn("⚠️ [WhatsApp] Caught 'markedUnread' error, treating as success.");
+                return true;
+            }
+            return false;
+        }
+    }
+
     public async sendTeacherArrivalAlert(
         teacherName: string,
         subject: string,
         targetUserId: string
     ) {
-        if (!this.isReady) {
-            console.warn("[WhatsApp] Client not ready");
+        const phone = await this.getUserPhone(targetUserId);
+        if (!phone) {
+            console.warn(`[WhatsApp] No phone for teacher ${targetUserId}`);
             return;
         }
 
-        try {
-            const phone = await this.getUserPhone(targetUserId);
-            if (!phone) {
-                console.warn(`[WhatsApp] No phone for teacher ${targetUserId}`);
-                return;
-            }
+        const chatId = this.formatChatId(phone);
+        const tName = teacherName.trim();
+        const sub = subject.trim();
+        const now = new Date();
+        const time = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        const day = now.toLocaleDateString('en-IN', { weekday: 'long' });
 
-            const chatId = this.formatChatId(phone);
+        const message =
+            `🔔 *TEACHER CHECKED IN*\n\n` +
+            `📅 *Day:* ${day}\n` +
+            `👩‍🏫 *Teacher:* ${tName}\n` +
+            `📘 *Subject:* ${sub}\n` +
+            `⏰ *Time:* ${time}\n\n` +
+            `👉 _Class has started. Please take your seats._`;
 
-            const tName = teacherName.trim();
-            const sub = subject.trim();
-            const now = new Date();
-            const time = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-            const day = now.toLocaleDateString('en-IN', { weekday: 'long' });
-
-            const message =
-                `🔔 *TEACHER CHECKED IN*\n\n` +
-                `📅 *Day:* ${day}\n` +
-                `👩‍🏫 *Teacher:* ${tName}\n` +
-                `📘 *Subject:* ${sub}\n` +
-                `⏰ *Time:* ${time}\n\n` +
-                `👉 _Class has started. Please take your seats._`;
-
-            await this.client.sendMessage(chatId, message);
-            console.log("✅ WhatsApp sent:", chatId);
-        } catch (e: any) {
-            console.error(`❌ [WhatsApp] Error sending alert to ${targetUserId}:`, e.message);
-        }
+        await this.safeSend(chatId, message);
     }
 
     public async sendBreakWarning(minsLeft: number, targetUserId: string) {
-        if (!this.isReady) return;
+        const phone = await this.getUserPhone(targetUserId);
+        if (!phone) return;
 
-        try {
-            const phone = await this.getUserPhone(targetUserId);
-            if (!phone) return;
+        const chatId = this.formatChatId(phone);
+        const message =
+            `🔔 *BREAK ENDING SOON*\n\n` +
+            `⏳ *Next Class:* Starts in ${minsLeft} minutes\n\n` +
+            `👉 _Please make your way back to class._`;
 
-            const chatId = this.formatChatId(phone);
-
-            const message =
-                `🔔 *BREAK ENDING SOON*\n\n` +
-                `⏳ *Next Class:* Starts in ${minsLeft} minutes\n\n` +
-                `👉 _Please make your way back to class._`;
-
-            await this.client.sendMessage(chatId, message);
-        } catch (e: any) {
-            console.error(`❌ [WhatsApp] Error sending break warning:`, e.message);
-        }
+        await this.safeSend(chatId, message);
     }
 
-    /**
-     * Generic Text Relay
-     * Sends a raw text message to a stored User ID.
-     */
     public async sendUserMessage(userId: string, text: string): Promise<boolean> {
-        if (!this.isReady) {
-            console.warn("[WhatsApp] Client not ready");
-            return false;
-        }
-
         const phone = await this.getUserPhone(userId);
         if (!phone) {
             console.warn(`[WhatsApp] No phone found for user ${userId}`);
             return false;
         }
-
         const chatId = this.formatChatId(phone);
-        try {
-            await this.client.sendMessage(chatId, text);
-            console.log(`✅ [WhatsApp] Message sent to ${userId} (${chatId})`);
-            return true;
-        } catch (error) {
-            console.error(`❌ [WhatsApp] Failed to send to ${userId}:`, error);
-            return false;
-        }
+        return await this.safeSend(chatId, text);
     }
 
-    /**
-     * Direct Phone Relay
-     * Sends a message directly to a phone number (e.g. "1234567890").
-     */
     public async sendDirectMessage(phoneIndex: string, text: string): Promise<boolean> {
-        if (!this.isReady) {
-            console.warn("[WhatsApp] Client not ready");
-            return false;
-        }
-
         const chatId = this.formatChatId(phoneIndex);
-        try {
-            await this.client.sendMessage(chatId, text);
-            console.log(`✅ [WhatsApp] Message sent to ${chatId}`);
-            return true;
-        } catch (error) {
-            console.error(`❌ [WhatsApp] Failed to send to ${chatId}:`, error);
-            return false;
-        }
+        return await this.safeSend(chatId, text);
     }
 }

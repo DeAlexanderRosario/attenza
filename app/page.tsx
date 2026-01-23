@@ -58,7 +58,7 @@ export default function HomePage() {
             <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-all">
               <Sparkles className="h-5 w-5 text-white" />
             </div>
-            <span className="font-bold text-xl tracking-tight text-foreground">CampusOS</span>
+            <span className="font-bold text-xl tracking-tight text-foreground">Attenza</span>
           </Link>
 
           {/* Desktop Nav */}
@@ -269,7 +269,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-2xl font-bold text-foreground">Predictive Analytics</h3>
                 <p className="text-muted-foreground">
-                  Don't just store data, use it. CampusOS analyzes attendance trends to predict dropouts and flag at-risk students before it's too late.
+                  Don't just store data, use it. Attenza analyzes attendance trends to predict dropouts and flag at-risk students before it's too late.
                 </p>
               </div>
               <div className="flex-1 w-full bg-background rounded-lg border border-border p-4">
@@ -315,7 +315,7 @@ export default function HomePage() {
             Ready to modernize your campus?
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Join 500+ forward-thinking institutions that have switched to CampusOS.
+            Join 500+ forward-thinking institutions that have switched to attenza.
             Setup takes less than 48 hours.
           </p>
 
@@ -346,7 +346,7 @@ export default function HomePage() {
                 <div className="p-1.5 rounded bg-primary">
                   <Sparkles className="h-4 w-4 text-primary-foreground" />
                 </div>
-                <span className="font-bold text-xl text-foreground">CampusOS</span>
+                <span className="font-bold text-xl text-foreground">Attenza</span>
               </Link>
               <p className="text-muted-foreground text-sm max-w-xs mb-6">
                 The complete operating system for modern educational institutions.

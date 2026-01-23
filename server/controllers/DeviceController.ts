@@ -68,7 +68,7 @@ export class DeviceController {
         const user = await this.usersCollection.findOne({ rfidTag });
 
         if (!user) {
-            ws.send(JSON.stringify({ type: "scan_result", success: false, message: "Unknown Tag" }));
+            ws.send(JSON.stringify({ type: "scan_result", success: false, message: "Unknown Tag", status: 404 }));
             return;
         }
 
@@ -114,7 +114,8 @@ export class DeviceController {
                     type: "scan_result",
                     success: false,
                     message: `Device '${deviceInfo}' not linked to Class. Please update device in database with classId field.`,
-                    role: "TEACHER"
+                    role: "TEACHER",
+                    status: 403
                 }));
                 return;
             }
@@ -139,7 +140,8 @@ export class DeviceController {
                     message,
                     role: "TEACHER",
                     occupiedBy: roomCheck.occupiedBy,
-                    occupiedUntil: roomCheck.occupiedUntil
+                    occupiedUntil: roomCheck.occupiedUntil,
+                    status: 429
                 }));
                 return;
             }
@@ -225,6 +227,7 @@ export class DeviceController {
         }
 
         const result = this.stateManager.handleTeacherCheckin(room, user.id, now);
+        const isAdhoc = result.slot?.id?.includes('adhoc');
 
         if (result.changed) {
             let msg = `Welcome ${user.name}`;
@@ -244,7 +247,13 @@ export class DeviceController {
                 // Double alert or specific logic if needed, but for now the above covers it.
             }
 
-            ws.send(JSON.stringify({ type: "scan_result", success: true, message: msg, role: "TEACHER" }));
+            ws.send(JSON.stringify({ 
+                type: "scan_result", 
+                success: true, 
+                message: msg, 
+                role: "TEACHER",
+                status: isAdhoc ? 202 : 201 
+            }));
 
             // Notify Admin Dashboard
             this.io.emit("activity_log", {
@@ -261,7 +270,13 @@ export class DeviceController {
             // REMOVED: Bulk Marking. Now strict student check-in.
 
         } else {
-            ws.send(JSON.stringify({ type: "scan_result", success: true, message: "Already Checked In", role: "TEACHER" }));
+            ws.send(JSON.stringify({ 
+                type: "scan_result", 
+                success: true, 
+                message: "Already Checked In", 
+                role: "TEACHER",
+                status: 409
+            }));
         }
     }
 
@@ -382,7 +397,7 @@ export class DeviceController {
         }
 
         if (!currentSlot) {
-            ws.send(JSON.stringify({ type: "scan_result", success: false, message: "No Class Active" }));
+            ws.send(JSON.stringify({ type: "scan_result", success: false, message: "No Class Active", status: 405 }));
             return;
         }
 
@@ -400,7 +415,8 @@ export class DeviceController {
             success: result.success,
             message: result.message,
             studentName: user.name,
-            status: result.status // PRESENT / LATE
+            status: result.success ? 200 : 409, // 200 for OK, 409 if already done (assuming result.success is false there)
+            attendanceStatus: result.status // PRESENT / LATE
         }));
 
         if (result.success) {
