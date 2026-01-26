@@ -1,63 +1,65 @@
-import { Client, LocalAuth } from "whatsapp-web.js";
+import makeWASocket, {
+    DisconnectReason,
+    useMultiFileAuthState,
+    makeCacheableSignalKeyStore,
+    ConnectionState,
+    WAConnectionState
+} from "@whiskeysockets/baileys";
+import { Boom } from "@hapi/boom";
+import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { Collection } from "mongodb";
+import path from "path";
+import fs from "fs";
 
 export class WhatsAppService {
-    private client: Client;
+    private sock: any;
     private isReady = false;
     private usersCollection: Collection;
+    private logger = pino({ level: "silent" });
 
     constructor(usersCollection: Collection) {
         this.usersCollection = usersCollection;
+        this.initializeBaileys();
+    }
 
-        this.client = new Client({
-            authStrategy: new LocalAuth({
-                clientId: "attenza-whatsapp" // persists session
-            }),
-            puppeteer: {
-                headless: true,
-                args: [
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu"
-                ]
+    private async initializeBaileys() {
+        console.log("🚀 [WhatsApp] Initializing Baileys Service...");
+
+        const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+
+        this.sock = makeWASocket({
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, this.logger),
+            },
+            printQRInTerminal: false, // We'll handle it manually for better logging
+            logger: this.logger,
+            browser: ["Attenza Server", "Chrome", "1.0.0"]
+        });
+
+        this.sock.ev.on("creds.update", saveCreds);
+
+        this.sock.ev.on("connection.update", (update: Partial<ConnectionState>) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                console.log("📲 Scan this QR to login WhatsApp (Baileys):");
+                qrcode.generate(qr, { small: true });
+            }
+
+            if (connection === "close") {
+                const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+                console.warn("⚠️ [WhatsApp] Connection closed. Reconnecting:", shouldReconnect);
+                this.isReady = false;
+                if (shouldReconnect) {
+                    this.initializeBaileys();
+                }
+            } else if (connection === "open") {
+                console.log("✅ [WhatsApp] Baileys Client READY");
+                this.isReady = true;
             }
         });
-
-        // 🔹 QR CODE (SCAN ONCE)
-        this.client.on("qr", (qr) => {
-            console.log("📲 Scan this QR to login WhatsApp:");
-            qrcode.generate(qr, { small: true });
-        });
-
-        // 🔹 READY
-        this.client.on("ready", () => {
-            console.log("✅ [WhatsApp] Client READY");
-            this.isReady = true;
-        });
-
-        // 🔹 AUTHENTICATED
-        this.client.on("authenticated", () => {
-            console.log("🔐 [WhatsApp] Authenticated");
-        });
-
-        // 🔹 AUTH FAILURE
-        this.client.on("auth_failure", (msg) => {
-            console.error("❌ [WhatsApp] Auth failure:", msg);
-            this.isReady = false;
-        });
-
-        // 🔹 DISCONNECTED
-        this.client.on("disconnected", (reason) => {
-            console.warn("⚠️ [WhatsApp] Disconnected:", reason);
-            this.isReady = false;
-        });
-
-        // 🚀 REAL INITIALIZATION (THIS WAS MISSING)
-        this.client.initialize();
-
-        console.log("🚀 [WhatsApp] Real service initializing...");
     }
 
     // ---------------- HELPERS ----------------
@@ -68,42 +70,34 @@ export class WhatsAppService {
     }
 
     private formatChatId(phone: string): string {
-        if (phone.includes("@c.us")) return phone;
+        if (phone.includes("@s.whatsapp.net")) return phone;
 
         // Strip non-digits
         let digits = phone.replace(/\D/g, "");
 
-        // Basic Auto-Correction for India (Common issue) | Or generic rule
-        // If 10 digits and starts with 6-9, assume India -> add 91
+        // Basic Auto-Correction for India (Common issue)
         if (digits.length === 10 && /^[6-9]/.test(digits)) {
             digits = "91" + digits;
         }
 
-        return `${digits}@c.us`;
+        return `${digits}@s.whatsapp.net`;
     }
 
     // ---------------- MESSAGES ----------------
 
-    /**
-     * Internal robust sender to handle the 'markedUnread' error in whatsapp-web.js
-     */
     private async safeSend(chatId: string, text: string): Promise<boolean> {
-        if (!this.isReady) {
-            console.warn("[WhatsApp] Client not ready");
+        if (!this.isReady || !this.sock) {
+            console.warn("[WhatsApp] Client not ready or socket missing");
             return false;
         }
 
         try {
-            await this.client.sendMessage(chatId, text);
+            console.log(`[WhatsApp] Sending message to ${chatId}...`);
+            await this.sock.sendMessage(chatId, { text });
             console.log(`✅ [WhatsApp] Message sent to ${chatId}`);
             return true;
         } catch (error: any) {
-            console.error(`❌ [WhatsApp] Failed to send to ${chatId}:`, error.message);
-            // If it's the 'markedUnread' error, message usually sent anyway
-            if (error.message && error.message.includes('markedUnread')) {
-                console.warn("⚠️ [WhatsApp] Caught 'markedUnread' error, treating as success.");
-                return true;
-            }
+            console.error(`❌ [WhatsApp] Hard failure sending to ${chatId}:`, error.message || error);
             return false;
         }
     }
@@ -121,18 +115,22 @@ export class WhatsAppService {
 
         const chatId = this.formatChatId(phone);
         const tName = teacherName.trim();
-        const sub = subject.trim();
+        const sub = (subject || "Class").trim();
         const now = new Date();
         const time = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         const day = now.toLocaleDateString('en-IN', { weekday: 'long' });
 
         const message =
-            `🔔 *TEACHER CHECKED IN*\n\n` +
-            `📅 *Day:* ${day}\n` +
-            `👩‍🏫 *Teacher:* ${tName}\n` +
+            `🚀 *Attenza Class Alert* 🚀\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🎓 *CLASS IS STARTING NOW* 🎓\n\n` +
             `📘 *Subject:* ${sub}\n` +
-            `⏰ *Time:* ${time}\n\n` +
-            `👉 _Class has started. Please take your seats._`;
+            `👩‍🏫 *Teacher:* ${tName}\n` +
+            `⏰ *Time:* ${time}\n` +
+            `📅 *Day:* ${day}\n\n` +
+            `👉 _Class has officially started. Please take your seats._\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `✨ _Have a great learning session!_`;
 
         await this.safeSend(chatId, message);
     }
@@ -143,9 +141,13 @@ export class WhatsAppService {
 
         const chatId = this.formatChatId(phone);
         const message =
-            `🔔 *BREAK ENDING SOON*\n\n` +
-            `⏳ *Next Class:* Starts in ${minsLeft} minutes\n\n` +
-            `👉 _Please make your way back to class._`;
+            `⏳ *Attenza Time Alert* ⏳\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `☕ *BREAK ENDING SOON* ☕\n\n` +
+            `🏃‍♂️ Your next session starts in *${minsLeft} minutes*.\n\n` +
+            `📍 *Action:* Please start moving towards your classroom.\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `_Stay punctual, stay ahead!_ 🚀`;
 
         await this.safeSend(chatId, message);
     }

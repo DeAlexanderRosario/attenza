@@ -1,57 +1,99 @@
-import { AttendanceState, ActiveSlot } from "../types";
+import { AttendanceState, ActiveSlot, InRoomStatus } from "../types";
 import { ActiveSessionService } from "./ActiveSessionService";
+import { AttendanceService } from "./AttendanceService";
+import { SystemConfigService } from "./SystemConfigService";
 
+/**
+ * StateManager - Manages active slots and student in-room status
+ * 
+ * NOTE: System mode is now managed by ModeManager
+ * This class focuses on slot-level state and in-room status tracking
+ */
 export class StateManager {
     private activeSlots: Map<string, ActiveSlot> = new Map();
 
-    // Configuration
-    private readonly TEACHER_GRACE_MINS = 5;
-    private readonly STUDENT_GRACE_MINS = 5;
-    private readonly BREAK_WARNING_MINS = 3;
+    // Callback for re-verification notifications
+    public onReVerification?: (room: string, message?: string) => void | Promise<void>;
 
-    constructor(private activeSessionService?: ActiveSessionService) { }
+    /**
+     * Static utility to normalize room IDs (handles aliases/mismatches)
+     */
+    public static normalizeRoom(room: string): string {
+        const normalized = room.trim().toUpperCase();
+        // Map common aliases to primary Room ID
+        if (normalized === "A205" || normalized === "ROOM-A205" || normalized === "ROOM-CSE-1") {
+            return "Room-CSE-1";
+        }
+        return room;
+    }
+
+    constructor(
+        private activeSessionService: ActiveSessionService | undefined,
+        private attendanceService: AttendanceService | undefined,
+        private configService: SystemConfigService
+    ) { }
 
     /**
      * Called every minute by the main loop to check for state transitions
-     * e.g., Auto-cancel if teacher never came
      */
     public async checkTime(now: Date) {
+        const settings = this.configService.getSettings();
         for (const [room, slot] of this.activeSlots.entries()) {
             // 1. Check Teacher Grace Period Expiry
             if (slot.status === AttendanceState.WAITING_FOR_TEACHER) {
                 const minutesSinceStart = (now.getTime() - slot.startTime.getTime()) / 60000;
 
-                if (minutesSinceStart > this.TEACHER_GRACE_MINS) {
+                if (minutesSinceStart > settings.teacherGraceMins) {
                     console.log(`[State] Slot ${slot.id} CANCELLED. Teacher missed grace period.`);
                     slot.status = AttendanceState.SLOT_CANCELLED;
 
                     // Persist to DB
-                    if (this.activeSessionService) {
-                        // We need a way to link slot to session. 
-                        // Ideally slot.id or slot.slotId should map to sessionId or we find by room/status.
-                        // For now, let's use room + status query in service or add sessionId to ActiveSlot interface?
-                        // Simpler: The ActiveSessionService has cancelAbandonedSessions which runs on its own loop in socket-server.
-                        // But for immediate sync, we can try to close specific one if we had sessionId.
-                        // Given ActiveSlot lacks sessionId, we rely on the service's own cleanup loop for DB sync usually.
-                        // BUT user wants robust sync.
-                        // Let's rely on ActiveSessionService's own 'cleanupExpiredSessions' active loop which is ALREADY in socket-server.
-                        // Wait, socket-server calls `activeSessionService.cleanupExpiredSessions()` every 5 mins.
-                        // User might want it faster.
+                    if (this.activeSessionService && slot.sessionId) {
+                        await this.activeSessionService.updateSessionStatus(slot.sessionId, "CANCELLED");
                     }
                 }
             }
 
-            // 2. Check End TimeActiveSessionService
+            // 2. Check Break Warning Buzzer
+            if (slot.status === AttendanceState.BREAK && !slot.warningTriggered) {
+                const warningTime = new Date(slot.endTime.getTime() - settings.breakWarningMins * 60000);
+                if (now >= warningTime) {
+                    console.log(`[State] Break warning triggered for ${slot.room}. Beeping buzzer.`);
+                    slot.warningTriggered = true;
+                    if (this.onReVerification) {
+                        this.onReVerification(slot.room, `${settings.breakWarningMins}-Minute Break Warning`);
+                    }
+                }
+            }
+
+            // 3. Check Re-verification Grace Period Expiry
+            if (slot.status === AttendanceState.RE_VERIFICATION && slot.reVerificationUntil) {
+                if (now >= slot.reVerificationUntil) {
+                    console.log(`[State] Re-verification window closed for ${slot.subjectName}`);
+                    slot.status = AttendanceState.SLOT_ACTIVE;
+                }
+            }
+
+            // 4. Handle Transitions (Break to Re-verification)
             if (now >= slot.endTime) {
-                if (slot.status !== AttendanceState.SLOT_CLOSED) {
+                if (slot.status === AttendanceState.BREAK) {
+                    console.log(`[State] Break ended for ${slot.room}. Entering RE_VERIFICATION.`);
+                    slot.status = AttendanceState.RE_VERIFICATION;
+
+                    // Set dynamic grace window
+                    const graceEnd = new Date(now.getTime() + settings.reVerificationGraceMins * 60000);
+                    slot.reVerificationUntil = graceEnd;
+
+                    if (this.onReVerification) {
+                        this.onReVerification(slot.room);
+                    }
+                } else if (slot.status !== AttendanceState.SLOT_CLOSED && slot.status !== AttendanceState.RE_VERIFICATION) {
                     console.log(`[State] Slot ${slot.id} CLOSED.`);
                     slot.status = AttendanceState.SLOT_CLOSED;
 
                     // Persist to DB
                     if (this.activeSessionService && slot.sessionId) {
-                        this.activeSessionService.closeSession(slot.sessionId)
-                            .then(() => console.log(`[State] Session ${slot.sessionId} marked CLOSED in DB`))
-                            .catch(e => console.error(`[State] Failed to close session ${slot.sessionId}`, e));
+                        await this.activeSessionService.closeSession(slot.sessionId);
                     }
                 }
             }
@@ -66,8 +108,6 @@ export class StateManager {
         const slot = this.activeSlots.get(room);
 
         if (!slot) {
-            // No class scheduled? Or maybe we need to fetch from DB?
-            // For now assuming StateManager is pre-loaded with today's schedule
             return { changed: false, isOverride: false };
         }
 
@@ -100,6 +140,39 @@ export class StateManager {
     }
 
     /**
+     * Update in-room status for a student
+     */
+    public async updateInRoomStatus(
+        studentId: string,
+        room: string,
+        status: InRoomStatus,
+        slotId?: string
+    ): Promise<void> {
+        if (this.attendanceService) {
+            await this.attendanceService.updateInRoomStatus(studentId, room, status, slotId);
+        }
+    }
+
+    /**
+     * Get in-room status for a student
+     */
+    public async getInRoomStatus(studentId: string, room: string): Promise<InRoomStatus> {
+        if (this.attendanceService) {
+            return await this.attendanceService.getInRoomStatus(studentId, room);
+        }
+        return "UNKNOWN";
+    }
+
+    /**
+     * Clear all in-room status (day reset)
+     */
+    public async clearInRoomStatus(): Promise<void> {
+        if (this.attendanceService) {
+            await this.attendanceService.clearAllInRoomStatus();
+        }
+    }
+
+    /**
      * Initializes a slot (e.g., at 8:50 AM for a 9:00 AM class)
      */
     public initializeSlot(
@@ -112,7 +185,8 @@ export class StateManager {
         classId?: string,
         sessionId?: string,
         organizationId?: string,
-        subjectCode?: string // Added
+        subjectCode?: string,
+        status?: AttendanceState
     ) {
         this.activeSlots.set(room, {
             id: crypto.randomUUID(),
@@ -122,17 +196,72 @@ export class StateManager {
             endTime,
             teacherId,
             subjectName,
-            subjectCode, // Added
+            subjectCode,
             classId,
             sessionId,
-            organizationId, // Added context
-            status: AttendanceState.WAITING_FOR_TEACHER, // Start in Waiting
+            organizationId,
+            status: status || AttendanceState.WAITING_FOR_TEACHER,
             isOverridden: false
         });
-        console.log(`[State] Initialized slot for ${subjectName} (${subjectCode}) in ${room} (Session: ${sessionId})`);
+        console.log(`[State] ${status ? 'RESUMED' : 'Initialized'} slot for ${subjectName} in ${room} (Session: ${sessionId})`);
     }
 
+    /**
+     * Get slot state for a room
+     */
     public getSlotState(room: string): ActiveSlot | undefined {
         return this.activeSlots.get(room);
+    }
+
+    /**
+     * Remove slot from active slots
+     */
+    public removeSlot(room: string): void {
+        this.activeSlots.delete(room);
+        console.log(`[State] Removed slot for room ${room}`);
+    }
+
+    /**
+     * Get all active slots
+     */
+    public getAllActiveSlots(): Map<string, ActiveSlot> {
+        return new Map(this.activeSlots);
+    }
+
+    /**
+     * Update slot status
+     */
+    public updateSlotStatus(room: string, status: AttendanceState): void {
+        const slot = this.activeSlots.get(room);
+        if (slot) {
+            slot.status = status;
+            console.log(`[State] Updated slot ${room} status to ${status}`);
+        }
+    }
+
+    /**
+     * Set break mode for a slot
+     */
+    public setBreakMode(room: string): void {
+        const slot = this.activeSlots.get(room);
+        if (slot) {
+            slot.status = AttendanceState.BREAK;
+            slot.warningTriggered = false; // Reset warning trigger
+            console.log(`[State] Set break mode for ${room}`);
+        }
+    }
+
+    /**
+     * Check if slot is in re-verification window
+     */
+    public isInReVerificationWindow(room: string): boolean {
+        const slot = this.activeSlots.get(room);
+        if (!slot) return false;
+
+        if (slot.status === AttendanceState.RE_VERIFICATION && slot.reVerificationUntil) {
+            return new Date() < slot.reVerificationUntil;
+        }
+
+        return false;
     }
 }

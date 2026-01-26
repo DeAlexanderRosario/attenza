@@ -69,3 +69,10 @@ Thumbs.db
 *.hex
 hardware/**/build/
 hardware/**/.pio/
+
+# =====================
+# whatsapp
+# =====================
+
+
+auth_info_baileys/

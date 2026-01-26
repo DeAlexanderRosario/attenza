@@ -9,6 +9,7 @@ export interface ActiveSession {
     teacherId: string;
     actualTeacherId?: string;
     subjectName: string;
+    subjectCode?: string;
 
     // Timing
     startTime: Date;
@@ -16,8 +17,19 @@ export interface ActiveSession {
     teacherArrivedAt?: Date;
 
     // Status
-    status: "WAITING_FOR_TEACHER" | "ACTIVE" | "CLOSED" | "CANCELLED";
+    status: "WAITING_FOR_TEACHER" | "ACTIVE" | "CLOSED" | "CANCELLED" | "BREAK";
     isOverridden: boolean;
+
+    // Attendance Poller
+    attendancePollerTriggered?: boolean;
+    teacherArrivalSnapshot?: {
+        timestamp: Date;
+        insideCount: number;
+        outsideCount: number;
+    };
+
+    // Re-verification tracking
+    reVerifiedStudents?: string[]; // Array of student IDs who re-verified during break
 
     // Metadata
     organizationId: string;
@@ -47,6 +59,14 @@ export class ActiveSessionService {
         }) as ActiveSession | null;
 
         if (activeSession) {
+            const now = new Date();
+            // PROACTIVE CLEANUP: If session has expired, treat as available
+            if (now >= activeSession.endTime) {
+                console.log(`[ActiveSession] Session ${activeSession.sessionId} in ${room} has expired. Marking CLOSED.`);
+                await this.closeSession(activeSession.sessionId);
+                return { available: true };
+            }
+
             // Get teacher name
             const teacher = await this.usersCollection.findOne({
                 id: activeSession.actualTeacherId || activeSession.teacherId
@@ -73,10 +93,29 @@ export class ActiveSessionService {
         deviceId: string;
         teacherId: string;
         subjectName: string;
+        subjectCode?: string;
         startTime: Date;
         endTime: Date;
         organizationId: string;
     }): Promise<ActiveSession> {
+        // SENOUR AUDIT: Check if a session already exists for this slot/room to prevent duplicates
+        if (sessionData.slotId) {
+            const idStr = String(sessionData.slotId);
+            const idNum = parseInt(idStr, 10);
+
+            const existing = await this.sessionsCollection.findOne({
+                room: sessionData.room,
+                $or: [{ slotId: idStr }, { slotId: idNum }],
+                status: { $in: ["WAITING_FOR_TEACHER", "ACTIVE", "BREAK"] },
+                organizationId: sessionData.organizationId
+            }) as ActiveSession | null;
+
+            if (existing) {
+                console.log(`[ActiveSession] Session already exists for slot ${sessionData.slotId} in ${sessionData.room}. Returning existing.`);
+                return existing;
+            }
+        }
+
         const session: ActiveSession = {
             sessionId: crypto.randomUUID(),
             ...sessionData,
@@ -96,11 +135,18 @@ export class ActiveSessionService {
      * Get active session in a room
      */
     async getActiveSessionInRoom(room: string, organizationId: string): Promise<ActiveSession | null> {
-        return await this.sessionsCollection.findOne({
+        const session = await this.sessionsCollection.findOne({
             room,
             organizationId,
             status: { $in: ["WAITING_FOR_TEACHER", "ACTIVE"] }
         }) as ActiveSession | null;
+
+        if (session && new Date() >= session.endTime) {
+            await this.closeSession(session.sessionId);
+            return null;
+        }
+
+        return session;
     }
 
     /**
@@ -190,7 +236,7 @@ export class ActiveSessionService {
     /**
      * Cancel sessions where teacher never arrived
      */
-    async cancelAbandonedSessions(graceMinutes: number = 5): Promise<number> {
+    async cancelAbandonedSessions(graceMinutes: number = 15): Promise<number> {
         const cutoffTime = new Date(Date.now() - graceMinutes * 60 * 1000);
 
         const result = await this.sessionsCollection.updateMany(
@@ -211,5 +257,69 @@ export class ActiveSessionService {
         }
 
         return result.modifiedCount;
+    }
+
+    /**
+     * Mark attendance poller as triggered
+     */
+    async setAttendancePollerTriggered(sessionId: string, insideCount: number, outsideCount: number): Promise<void> {
+        await this.sessionsCollection.updateOne(
+            { sessionId },
+            {
+                $set: {
+                    attendancePollerTriggered: true,
+                    teacherArrivalSnapshot: {
+                        timestamp: new Date(),
+                        insideCount,
+                        outsideCount
+                    },
+                    updatedAt: new Date()
+                }
+            }
+        );
+        console.log(`[ActiveSession] Attendance poller triggered for session ${sessionId}`);
+    }
+
+    /**
+     * Mark student as re-verified during break
+     */
+    async markStudentReVerified(sessionId: string, studentId: string): Promise<void> {
+        await this.sessionsCollection.updateOne(
+            { sessionId },
+            {
+                $addToSet: { reVerifiedStudents: studentId },
+                $set: { updatedAt: new Date() }
+            }
+        );
+        console.log(`[ActiveSession] Student ${studentId} re-verified for session ${sessionId}`);
+    }
+
+    /**
+     * Get re-verified students for a session
+     */
+    async getReVerifiedStudents(sessionId: string): Promise<string[]> {
+        const session = await this.sessionsCollection.findOne({ sessionId }) as ActiveSession | null;
+        return session?.reVerifiedStudents || [];
+    }
+
+    /**
+     * Check if attendance poller was triggered
+     */
+    async wasAttendancePollerTriggered(sessionId: string): Promise<boolean> {
+        const session = await this.sessionsCollection.findOne({ sessionId }) as ActiveSession | null;
+        return session?.attendancePollerTriggered || false;
+    }
+
+    /**
+     * Get session by slot ID and date
+     */
+    async getSessionBySlot(slotId: string, organizationId: string): Promise<ActiveSession | null> {
+        const session = await this.sessionsCollection.findOne({
+            slotId,
+            organizationId,
+            status: { $in: ["WAITING_FOR_TEACHER", "ACTIVE", "BREAK"] }
+        }) as ActiveSession | null;
+
+        return session;
     }
 }

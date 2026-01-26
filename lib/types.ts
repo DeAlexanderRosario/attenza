@@ -286,12 +286,15 @@ export interface TeacherSubjectMapping {
 
 export interface Device {
   id: string
+  deviceId: string // Hardware UID
   name: string
   type: "rfid_reader" | "display_board" | "biometric"
-  location: string
+  room: string     // Linked Classroom
+  placement: "inside" | "outside"
+  classId?: string // Associated Class ID
   ipAddress?: string
   status: "online" | "offline" | "maintenance"
-  lastPing: Date
+  lastSeen: Date
   config?: {
     readerMode: "check-in" | "check-out" | "both"
     volume: number

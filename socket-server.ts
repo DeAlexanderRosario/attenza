@@ -9,7 +9,10 @@ import { AttendanceService } from "./server/services/AttendanceService";
 import { WhatsAppService } from "./server/services/WhatsAppService";
 import { SlotService } from "./server/services/SlotService";
 import { ActiveSessionService } from "./server/services/ActiveSessionService";
+import { ModeManager } from "./server/services/ModeManager";
+import { AttendancePoller } from "./server/services/AttendancePoller";
 import { DeviceController } from "./server/controllers/DeviceController";
+import { SystemConfigService } from "./server/services/SystemConfigService";
 
 dotenv.config();
 
@@ -55,51 +58,93 @@ async function startServer() {
         const slotsCollection = db.collection("college_slots");
         const settingsCollection = db.collection("system_settings");
         const classesCollection = db.collection("classes");
+        const deviceLogsCollection = db.collection("device_logs");
+        const inRoomStatusCollection = db.collection("in_room_status"); // NEW
 
         // --- 3. INITIALIZE SERVICES (DEPENDENCY INJECTION) ---
-        // Core Logic
-        const stateManager = new StateManager();
 
-        // Data Services
-        const attendanceService = new AttendanceService(attendanceCollection, usersCollection);
-        const slotService = new SlotService(slotsCollection, settingsCollection, classesCollection);
+        // Base Services
         const whatsAppService = new WhatsAppService(usersCollection);
+        const configService = new SystemConfigService(settingsCollection);
+        await configService.initialize();
+
+        const slotService = new SlotService(slotsCollection, settingsCollection, classesCollection, configService);
+
+        // 1. Attendance Service (needs inRoomStatusCollection)
+        const attendanceService = new AttendanceService(
+            attendanceCollection,
+            usersCollection,
+            inRoomStatusCollection
+        );
+
+        // 2. Attendance Poller (needs AttendanceService)
+        const attendancePoller = new AttendancePoller(
+            attendanceService, // Inject Service here
+            usersCollection,
+            inRoomStatusCollection,
+            whatsAppService,
+            configService
+        );
+
+        // 3. Mode Manager (needs SlotService)
+        const modeManager = new ModeManager(slotService, configService, io);
+
+        // 4. Active Session Service
         const activeSessionService = new ActiveSessionService(
             db.collection("active_sessions"),
             usersCollection
         );
 
-        // Controller (Orchestrator)
+        // 5. State Manager (needs ActiveSessionService and AttendanceService)
+        const stateManager = new StateManager(activeSessionService, attendanceService, configService);
+
+        // 6. Link StateManager back to ModeManager
+        modeManager.setStateManager(stateManager);
+
+        // 7. Device Controller (Orchestrator)
         const deviceController = new DeviceController(
             devicesCollection,
+            deviceLogsCollection,
             usersCollection,
             stateManager,
             attendanceService,
             slotService,
             whatsAppService,
             activeSessionService,
+            modeManager, // ModeManager back to Controller
+            attendancePoller,
             io
         );
 
-        // --- 4. START PROCESSES ---
+        // --- 4. INITIAL MODE CHECK ---
+        // Check mode immediately on startup to set correct initial state
+        await modeManager.checkModeTransitions();
+        console.log(`[Server] Initial mode set to: ${modeManager.getCurrentMode()}`);
 
-        // A. Helper Loop (Time-based events like Cancellations)
+        // --- 5. START PROCESSES ---
+
+        // A. Mode Transition Loop (Check mode transitions every minute)
+        setInterval(async () => {
+            await modeManager.checkModeTransitions();
+        }, 60000); // Check every minute
+
+        // B. State Manager Time Check Loop (Time-based events like Cancellations)
         setInterval(() => {
             stateManager.checkTime(new Date());
         }, 60000); // Check every minute
 
-        // B. Session Cleanup Loop (Cleanup expired sessions)
+        // C. Session Cleanup Loop (Cleanup expired sessions)
         setInterval(async () => {
             await activeSessionService.cleanupExpiredSessions();
             await activeSessionService.cancelAbandonedSessions(5);
         }, 5 * 60 * 1000); // Every 5 minutes
 
-        // B. WebSocket Listener (Hardware)
+        // D. WebSocket Listener (Hardware)
         wss.on("connection", (ws: WebSocket) => {
             deviceController.handleConnection(ws);
         });
 
-        // C. Socket.IO Listener (Frontend)
+        // E. Socket.IO Listener (Frontend)
         io.on("connection", (socket: Socket) => {
             console.log("[IO] Frontend connected:", socket.id);
             socket.on("join_user_room", (id) => socket.join(`user:${id}`));
@@ -126,6 +171,7 @@ async function startServer() {
             console.log(`> 🚀 Production Attendance Server running on port ${port}`);
             console.log(`> 🔗 WebSocket: ws://localhost:${port}/ws`);
             console.log(`> 🔗 Socket.IO: http://localhost:${port}`);
+            console.log(`> 🎯 System Mode: ${modeManager.getCurrentMode()}`);
         });
 
     } catch (e) {
