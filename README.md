@@ -1,386 +1,165 @@
-# 🎓 RFID Attendance Management System
+# 🎓 Attenza: Smart Attendance System
 
-## Overview
-A comprehensive Next.js-based attendance management system with RFID integration, real-time tracking, and advanced analytics for educational institutions.
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Latest-green?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
+[![Socket.io](https://img.shields.io/badge/Socket.io-4.0-white?style=for-the-badge&logo=socket.io)](https://socket.io/)
+
+**Attenza** is a real-time, hardware-integrated student attendance management system. It leverages RFID technology for seamless check-ins and automated WhatsApp notifications to keep students informed about teacher arrivals, class timings, and attendance status.
 
 ---
 
-## 📋 Table of Contents
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Core Features](#core-features)
-- [Data Models](#data-models)
-- [Key Workflows](#key-workflows)
-- [API Reference](#api-reference)
+## 🚀 Key Features
+
+-   **Real-time RFID Integration**: Instant attendance marking via ESP8266-based RFID readers.
+-   **Dual-Device Context**: Specialized logic for "Inside" and "Outside" classroom units to track movement and early check-ins.
+-   **Smart WhatsApp Alerts**: Automated notifications for teacher arrivals, late entries, and break warnings using highly attractive templates.
+-   **Dynamic System Configuration**: Admin dashboard to configure grace periods, operating hours, and attendance policies without code changes.
+-   **Comprehensive Dashboard**: Real-time analytics, student tracking, and timetable management for administrators.
+-   **Points System**: Gamified attendance with points awarded for punctuality.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: Next.js 16 (App Router), React, TypeScript
-- **UI**: Tailwind CSS, shadcn/ui, Radix UI
-- **Backend**: Next.js Server Actions
-- **Database**: MongoDB (Native Driver)
-- **Real-time**: Socket.IO
-- **Charts**: Recharts
-- **Authentication**: NextAuth.js
+**Frontend:**
+- [Next.js 14](https://nextjs.org/) (App Router)
+- [Tailwind CSS](https://tailwindcss.com/) & [shadcn/ui](https://ui.shadcn.com/)
+- [Lucide React](https://lucide.dev/) for iconography
+
+**Backend:**
+- [Node.js](https://nodejs.org/) & TypeScript
+- [Socket.io](https://socket.io/) for real-time dashboard updates
+- [WebSocket (ws)](https://github.com/websockets/ws) for hardware communication
+- [MongoDB](https://www.mongodb.com/) for persistent storage
+- [Baileys](https://github.com/WhiskeySockets/Baileys) for WhatsApp integration
+
+**Hardware:**
+- ESP8266 / NodeMCU
+- RC522 RFID Module
 
 ---
 
-## 📁 Project Structure
+## 📐 System Architecture
 
+### Communication Flow
+```mermaid
+flowchart TD
+    subgraph Hardware
+        A[Outside RFID Unit]
+        B[Inside RFID Unit]
+    end
+
+    subgraph "Backend (Node.js/TS)"
+        C[WebSocket Server]
+        D[Service Layer]
+        E[WhatsApp Service]
+        F[Socket.io Server]
+    end
+
+    subgraph Data
+        G[(MongoDB)]
+    end
+
+    subgraph "Frontend (Next.js)"
+        H[Admin Dashboard]
+    end
+
+    A & B -->|RFID Data| C
+    C --> D
+    D <--> G
+    D -->|Notifications| E
+    D -->|Real-time Updates| F
+    F -->|Live Logs| H
+    E -->|Alerts| I[Student WhatsApp]
 ```
-iigh_azi/
-├── app/
-│   ├── actions/              # Server Actions (Backend Logic)
-│   │   ├── admin.ts          # Dashboard stats, users, devices
-│   │   ├── attendance.ts     # Attendance reports & analytics
-│   │   ├── department.ts     # Department management
-│   │   └── subjects.ts       # Subject/Course management
-│   ├── dashboard/
-│   │   └── admin/            # Admin Dashboard Pages
-│   │       ├── attendance/   # Attendance tracking & reports
-│   │       ├── departments/  # Department management
-│   │       ├── subjects/     # Subject management
-│   │       └── devices/      # Device management
-├── components/
-│   ├── admin/                # Admin Components
-│   │   ├── attendance/       # Attendance components
-│   │   ├── department/       # Department components
-│   │   └── subjects/         # Subject components
-│   └── ui/                   # shadcn/ui components
-├── lib/
-│   ├── types.ts              # TypeScript interfaces
-│   ├── db.ts                 # Database connection
-│   └── mongodb.ts            # MongoDB client
-└── socket-server.ts          # WebSocket server for RFID
-```
+
+### System Lifecycle & Modes
+The system operates in distinct modes managed by a centralized `ModeManager`, dictating classroom accessibility and automated alerts.
+
+- **CLOSED**: Outside operating hours (Hardware rejects scans).
+- **EARLY_ACCESS**: 30m before first class (Allows entry without attendance).
+- **IDLE**: No active class (Movement tracking only).
+- **SLOT_ACTIVE**: Teacher arrival triggers attendance and alerts.
+- **BREAK**: Scheduled gaps between classes with end-of-break buzzers.
 
 ---
 
-## ✨ Core Features
+## 🧠 Core Logic & Algorithms
 
-### 1. **Attendance System**
-- ✅ Real-time RFID scanning
-- ✅ Automatic status calculation (Present/Late/Absent)
-- ✅ Grace period support (configurable)
-- ✅ Department-wise summaries
-- ✅ Export to CSV/Excel/PDF
-- ✅ Universal search (Students/Departments/Subjects)
+### A. Student Attendance Flow
+1. **Scenario 1: Standard Entry**: Tapping during an active class marks the student **PRESENT** (within grace period) or **LATE** (+ points awarded).
+2. **Scenario 2: Early Bird**: Tapping before class starts proactively marks attendance for the upcoming slot.
+3. **Scenario 3: Re-verification**: During class-to-class transitions, students use the **Inside Unit** to verify continued presence.
 
-### 2. **Department Management**
-- ✅ Department profiles with statistics
-- ✅ Staff allocation (HOD, Class Tutors, Teachers)
-- ✅ Teacher reallocation across departments
-- ✅ Attendance trend graphs
-- ✅ Department-specific analytics
-
-### 3. **Subject/Course Management** 🆕
-- ✅ Common subjects (shared across departments)
-- ✅ Unique subjects (department-specific)
-- ✅ Subject-to-Department mapping (many-to-many)
-- ✅ Teacher-to-Subject mapping (many-to-many)
-- ✅ Cross-department teaching support
-
-### 4. **Device Management**
-- ⚠️ Device registration (RFID readers, displays)
-- ⚠️ Location mapping
-- ⚠️ Status monitoring
-- ⚠️ Configuration management
-
-### 5. **Analytics & Reports**
-- ✅ Dashboard with key metrics
-- ✅ Attendance trends (7-day chart)
-- ✅ Defaulter lists (<75% attendance)
-- ⚠️ Period-wise heatmaps
-- ⚠️ Faculty performance analytics
+### B. Teacher Arrival (The System Heartbeat)
+When a teacher scans their ID:
+- An **Active Session** is initialized in MongoDB.
+- A **Snapshot** is taken of all students already physically in the room.
+- **WhatsApp Alerts** are automatically sent to missing students: *"Teacher has arrived in {Room}! Scan now to avoid being marked late."*
 
 ---
 
-## 📊 Data Models
+## 🚦 Getting Started
 
-### User
-```typescript
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "student" | "teacher" | "admin" | "super_admin"
-  rfidTag?: string
-  department?: string
-  year?: number
-  semester?: number
-  points: number
-}
-```
+### Prerequisites
 
-### Subject (NEW)
-```typescript
-interface Subject {
-  id: string
-  name: string
-  code: string
-  credits: number
-  type: "common" | "unique"  // Common = shared, Unique = dept-specific
-  description?: string
-}
-```
+-   Node.js 18+
+-   MongoDB Instance (Local or Atlas)
+-   Arduino IDE (for hardware deployment)
 
-### Subject-Department Mapping
-```typescript
-interface SubjectDepartmentMapping {
-  id: string
-  subjectId: string
-  departmentCode: string
-  semester: number
-  isElective: boolean
-}
-```
+### 1. Server Setup
 
-### Teacher-Subject Mapping
-```typescript
-interface TeacherSubjectMapping {
-  id: string
-  teacherId: string
-  subjectId: string
-  departmentCode: string  // Teacher can teach in different dept
-  semester: number
-}
-```
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/DeAlexanderRosario/attenza.git
+    cd attenza
+    ```
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+3.  Configure Environment Variables:
+    Create a `.env` file in the root:
+    ```env
+    MONGODB_URI=your_mongodb_connection_string
+    NEXT_PUBLIC_APP_URL=http://localhost:3000
+    SOCKET_PORT=3001
+    ```
+4.  Run the production server:
+    ```bash
+    npm run dev
+    ```
+5.  Start the Socket Server (Hardware Gateway):
+    ```bash
+    npx ts-node socket-server.ts
+    ```
 
-### Slot (Timetable Entry)
-```typescript
-interface Slot {
-  id: string
-  courseCode: string
-  courseName: string
-  teacherId: string
-  day: string
-  startTime: string
-  endTime: string
-  room: string
-  department: string
-  semester: number
-  status?: "Scheduled" | "Conducted" | "Late" | "Cancelled"
-}
-```
+### 2. Hardware Setup
 
-### Attendance Record
-```typescript
-interface AttendanceRecord {
-  id: string
-  studentId: string
-  slotId: string
-  timestamp: Date
-  status: "present" | "late" | "absent"
-  pointsEarned: number
-}
-```
+1.  Navigate to `hardware/esp8266_rfid/`.
+2.  Open `esp8266_rfid.ino` in Arduino IDE.
+3.  Configure your WiFi credentials and Server WebSocket URL.
+4.  Upload to your ESP8266 device.
 
 ---
 
-## 🔄 Key Workflows
+## ⚙️ Configuration
 
-### 1. RFID Attendance Marking Flow
-
-```
-1. Student scans RFID tag → Socket Server receives scan
-2. Server checks current time slot (from time_slots config)
-3. Finds matching slot (department, semester, day, time)
-4. Check grace period:
-   - Within 15 min → "present"
-   - 15-30 min → "late"
-   - >30 min or wrong slot → "absent"
-5. Create attendance record in MongoDB
-6. Update student points
-7. Send real-time notification via WebSocket
-```
-
-### 2. Subject Assignment Flow
-
-```
-1. Admin creates Subject (name, code, credits, type)
-2. Admin maps Subject → Department (semester, elective flag)
-3. Admin assigns Teacher → Subject (for specific dept/semester)
-4. Teacher can now teach this subject in that department
-5. Timetable slots reference this subject via courseCode
-```
-
-### 3. Cross-Department Teaching
-
-**Example**: Mathematics teacher from CS dept teaching in EE dept
-
-```
-1. Create Subject: "Mathematics" (type: "common")
-2. Map to CS Dept → Semester 1
-3. Map to EE Dept → Semester 1
-4. Assign Teacher (CS dept teacher) → Math → CS Dept
-5. Assign same Teacher → Math → EE Dept
-6. Teacher now appears in both dept timetables
-```
+The system behavior can be managed via the **Admin Dashboard > Settings** page:
+-   **Teacher Grace Period**: Time allowed for teachers to arrive before a slot is auto-cancelled.
+-   **Entry Windows**: Punctuality thresholds for "Present" vs "Late" status.
+-   **Operating Hours**: Start and end times for the entire system.
+-   **Break Warnings**: Timing for pre-end-of-break alerts.
 
 ---
 
-## 🔌 API Reference
+## 🛡️ License
 
-### Attendance Actions
-```typescript
-// Get dashboard stats
-getAttendanceDashboardStats() 
-// Returns: { totalStudents, overallPercentage, defaultersCount, totalDepartments }
-
-// Get department summary
-getDepartmentAttendanceSummary(filters: AttendanceFilter)
-// Returns: Array of { department, present, late, absent, attendanceRate }
-
-// Export reports
-getDetailedAttendanceReport(type: "monthly" | "daily", filters)
-// Returns: Array of detailed attendance records for CSV export
-
-// Universal search
-globalSearch(query: string)
-// Returns: { students[], departments[], courses[] }
-```
-
-### Subject Actions
-```typescript
-// CRUD Operations
-getSubjects()
-getSubjectById(id)
-createSubject(data)
-updateSubject(id, data)
-deleteSubject(id)
-
-// Department Mapping
-assignSubjectToDepartment({ subjectId, departmentCode, semester, isElective })
-removeSubjectFromDepartment(subjectId, departmentCode, semester)
-getSubjectsByDepartment(departmentCode, semester?)
-
-// Teacher Mapping
-assignTeacherToSubject({ teacherId, subjectId, departmentCode, semester })
-removeTeacherFromSubject(teacherId, subjectId, departmentCode)
-getTeacherSubjects(teacherId)
-getSubjectTeachers(subjectId, departmentCode?)
-```
-
-### Department Actions
-```typescript
-getDepartments()
-getDepartmentById(id)
-createDepartment(data)
-getDepartmentStats(deptId)
-// Returns: { totalStaff, maleStaff, femaleStaff, totalStudents, chartData }
-
-assignHOD(deptId, teacherId)
-reallocateTeacher(teacherId, newDeptCode)
-```
+Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 
-## 🗄️ MongoDB Collections
-
-### Core Collections
-- `users` - Students, Teachers, Admins
-- `departments` - Department entities
-- `subjects` - Subject/Course catalog
-- `subject_department_mappings` - Subject ↔ Department relationships
-- `teacher_subject_mappings` - Teacher ↔ Subject relationships
-- `slots` - Timetable entries
-- `attendance` - Attendance records
-- `devices` - RFID readers and devices
-- `holidays` - Holiday calendar
-- `system_settings` - Time slots configuration
-
-### Indexes (Recommended)
-```javascript
-db.attendance.createIndex({ studentId: 1, timestamp: -1 })
-db.attendance.createIndex({ slotId: 1 })
-db.users.createIndex({ role: 1, department: 1 })
-db.slots.createIndex({ department: 1, semester: 1, day: 1 })
-db.subject_department_mappings.createIndex({ subjectId: 1, departmentCode: 1 })
-db.teacher_subject_mappings.createIndex({ teacherId: 1 })
-```
-
----
-
-## 🚀 Getting Started
-
-### 1. Environment Setup
-```bash
-# .env.local
-MONGODB_URI=mongodb://localhost:27017/attenza
-NEXTAUTH_SECRET=your-secret-key
-NEXTAUTH_URL=http://localhost:3000
-```
-
-### 2. Install Dependencies
-```bash
-npm install
-```
-
-### 3. Run Development Server
-```bash
-npm run dev
-```
-
-### 4. Start Socket Server (for RFID)
-```bash
-node socket-server.js
-```
-
----
-
-## 🎯 Roadmap
-
-### ✅ Completed
-- [x] Real-time RFID attendance
-- [x] Department management
-- [x] Subject management with many-to-many relationships
-- [x] Universal search
-- [x] Main attendance dashboard
-- [x] Export functionality
-
-### 🚧 In Progress
-- [ ] Student-wise detailed view (daily grid)
-- [ ] Period-wise analytics heatmap
-- [ ] Device management UI
-
-### 📝 Planned
-- [ ] Mobile app (PWA)
-- [ ] SMS/Email notifications
-- [ ] Biometric integration
-- [ ] AI-powered attendance predictions
-- [ ] Parent portal
-
----
-
-## 🐛 Known Issues
-
-1. ⚠️ Some admin pages not linked in navigation
-2. ⚠️ Device management page incomplete
-3. ⚠️ Timetable grid needs real status data (partially fixed)
-
----
-
-## 📝 Notes
-
-- **Grace Period**: Currently hardcoded (15 min for present, 30 min for late)
-- **Defaulter Threshold**: 75% attendance
-- **Time Slots**: Configurable via system_settings collection
-- **Multi-Department Teaching**: Fully supported via teacher_subject_mappings
-
----
-
-## 🤝 Contributing
-
-When adding new features:
-1. Update types in `lib/types.ts`
-2. Create server actions in `app/actions/`
-3. Build UI components in `components/`
-4. Create page in `app/dashboard/admin/`
-5. Update this README
-
----
-
-**Last Updated**: 2025-12-23  
-**Version**: 1.0.0
+<p align="center">
+  Made with ❤️ by the Attenza Team
+</p>
