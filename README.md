@@ -1,102 +1,89 @@
-# 🎓 Attenza: Smart Attendance System
+<p align="center">
+  <img src="attenza_banner.png" width="100%" alt="Attenza Banner" />
+</p>
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Latest-green?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
-[![Socket.io](https://img.shields.io/badge/Socket.io-4.0-white?style=for-the-badge&logo=socket.io)](https://socket.io/)
+# <p align="center">🎓 Attenza: Smart Attendance System</p>
 
-**Attenza** is a real-time, hardware-integrated student attendance management system. It leverages RFID technology for seamless check-ins and automated WhatsApp notifications to keep students informed about teacher arrivals, class timings, and attendance status.
+<p align="center">
+  <strong>A premium, real-time attendance management ecosystem powered by RFID and WhatsApp.</strong>
+</p>
 
----
-
-## 🚀 Key Features
-
--   **Real-time RFID Integration**: Instant attendance marking via ESP8266-based RFID readers.
--   **Dual-Device Context**: Specialized logic for "Inside" and "Outside" classroom units to track movement and early check-ins.
--   **Smart WhatsApp Alerts**: Automated notifications for teacher arrivals, late entries, and break warnings using highly attractive templates.
--   **Dynamic System Configuration**: Admin dashboard to configure grace periods, operating hours, and attendance policies without code changes.
--   **Comprehensive Dashboard**: Real-time analytics, student tracking, and timetable management for administrators.
--   **Points System**: Gamified attendance with points awarded for punctuality.
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-16-6366f1?style=for-the-badge&logo=next.js&logoColor=white" />
+  <img src="https://img.shields.io/badge/TypeScript-5.0-a855f7?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/MongoDB-Latest-emerald?style=for-the-badge&logo=mongodb&logoColor=white" />
+  <img src="https://img.shields.io/badge/Socket.io-4.0-white?style=for-the-badge&logo=socket.io&logoColor=black" />
+</p>
 
 ---
 
-## 🛠️ Tech Stack
+> [!IMPORTANT]
+> **Project Submission**: This project is submitted as a mini project by a 3rd-year B.Tech student of the Electronics and Communication Engineering Department, **AISAT Engineering College**.
 
-**Frontend:**
-- [Next.js 14](https://nextjs.org/) (App Router)
-- [Tailwind CSS](https://tailwindcss.com/) & [shadcn/ui](https://ui.shadcn.com/)
-- [Lucide React](https://lucide.dev/) for iconography
-
-**Backend:**
-- [Node.js](https://nodejs.org/) & TypeScript
-- [Socket.io](https://socket.io/) for real-time dashboard updates
-- [WebSocket (ws)](https://github.com/websockets/ws) for hardware communication
-- [MongoDB](https://www.mongodb.com/) for persistent storage
-- [Baileys](https://github.com/WhiskeySockets/Baileys) for WhatsApp integration
-
-**Hardware:**
-- ESP8266 / NodeMCU
-- RC522 RFID Module
+**Attenza** is a state-of-the-art, hardware-integrated student attendance management system. Designed for precision and ease of use, it leverages RFID technology for seamless check-ins and automated WhatsApp notifications to keep students informed in real-time.
 
 ---
 
-## 📐 System Architecture
+## ✨ Key Features
 
-### Communication Flow
+| Feature | Description |
+| :--- | :--- |
+| 🛡️ **RFID Integration** | Instant attendance marking via ESP8266-based RFID readers. |
+| 📍 **Dual-Device Context** | Specialized "Inside" and "Outside" logic to track physical presence and early check-ins. |
+| 📱 **Smart WhatsApp Alerts** | Automated notifications for teacher arrivals, late entries, and class updates. |
+| ⚙️ **Dynamic Config** | Admin dashboard to configure grace periods and attendance policies on the fly. |
+| 📊 **Real-time Analytics** | Live dashboard updates using Socket.io for monitoring classroom activity. |
+| 🏆 **Points System** | Gamified attendance tracking to reward punctuality and consistency. |
+
+---
+
+## 🏗️ System Architecture
+
+<details>
+<summary><b>Click to expand Architecture Details</b></summary>
+
 ```mermaid
 flowchart TD
-    subgraph Hardware
-        A[Outside RFID Unit]
-        B[Inside RFID Unit]
+    subgraph Hardware ["📡 Hardware Layer"]
+        A["Outside RFID Unit"]
+        B["Inside RFID Unit"]
     end
 
-    subgraph "Backend (Node.js/TS)"
-        C[WebSocket Server]
-        D[Service Layer]
-        E[WhatsApp Service]
-        F[Socket.io Server]
+    subgraph Backend ["⚡ Backend (Node.js/TS)"]
+        C["WebSocket Server"]
+        D["Service Layer (Attendance/Slots)"]
+        E["WhatsApp Notification Service"]
+        F["Socket.io (Real-time Broadcaster)"]
     end
 
-    subgraph Data
-        G[(MongoDB)]
+    subgraph Data ["💾 Data Persistence"]
+        G[("MongoDB Atlas")]
     end
 
-    subgraph "Frontend (Next.js)"
-        H[Admin Dashboard]
+    subgraph Frontend ["🎨 Frontend (Next.js)"]
+        H["Admin Dashboard"]
+        I["Live Activity Log"]
     end
 
     A & B -->|RFID Data| C
     C --> D
     D <--> G
-    D -->|Notifications| E
-    D -->|Real-time Updates| F
-    F -->|Live Logs| H
-    E -->|Alerts| I[Student WhatsApp]
+    D -->|Alerts| E
+    D -->|Live Data| F
+    F -->|Updates| I
+    E -->|WhatsApp| J["Student Mobile"]
 ```
-
-### System Lifecycle & Modes
-The system operates in distinct modes managed by a centralized `ModeManager`, dictating classroom accessibility and automated alerts.
-
-- **CLOSED**: Outside operating hours (Hardware rejects scans).
-- **EARLY_ACCESS**: 30m before first class (Allows entry without attendance).
-- **IDLE**: No active class (Movement tracking only).
-- **SLOT_ACTIVE**: Teacher arrival triggers attendance and alerts.
-- **BREAK**: Scheduled gaps between classes with end-of-break buzzers.
+</details>
 
 ---
 
-## 🧠 Core Logic & Algorithms
+## 🛠️ How it Works
 
-### A. Student Attendance Flow
-1. **Scenario 1: Standard Entry**: Tapping during an active class marks the student **PRESENT** (within grace period) or **LATE** (+ points awarded).
-2. **Scenario 2: Early Bird**: Tapping before class starts proactively marks attendance for the upcoming slot.
-3. **Scenario 3: Re-verification**: During class-to-class transitions, students use the **Inside Unit** to verify continued presence.
-
-### B. Teacher Arrival (The System Heartbeat)
-When a teacher scans their ID:
-- An **Active Session** is initialized in MongoDB.
-- A **Snapshot** is taken of all students already physically in the room.
-- **WhatsApp Alerts** are automatically sent to missing students: *"Teacher has arrived in {Room}! Scan now to avoid being marked late."*
+1.  **Teacher Check-In**: A teacher scans their RFID card at the classroom door.
+2.  **Session Activation**: The system initializes an active class session and captures a "snapshot" of students already present.
+3.  **Broadcasting Alerts**: Students not yet checked in receive an immediate WhatsApp notification: *"Teacher has arrived! Please check in now."*
+4.  **Student Entry**: Students scan their cards. Depending on the timing, they are marked **Present**, **Late**, or **Early Access**.
+5.  **Re-Verification**: Students use the "Inside Unit" during transitions to confirm their continued presence.
 
 ---
 
@@ -104,62 +91,67 @@ When a teacher scans their ID:
 
 ### Prerequisites
 
--   Node.js 18+
--   MongoDB Instance (Local or Atlas)
--   Arduino IDE (for hardware deployment)
+-   **Node.js** 18 (LTS) or higher
+-   **Yarn** Package Manager
+-   **MongoDB** Instance (Local or Atlas)
+-   **Arduino IDE** (for hardware deployment)
 
 ### 1. Server Setup
 
-1.  Clone the repository:
+1.  **Clone the repository**:
     ```bash
     git clone https://github.com/DeAlexanderRosario/attenza.git
     cd attenza
     ```
-2.  Install dependencies:
+2.  **Install dependencies**:
     ```bash
-    npm install
+    yarn install
     ```
-3.  Configure Environment Variables:
-    Create a `.env` file in the root:
+3.  **Build the application**:
+    ```bash
+    yarn build
+    ```
+4.  **Environment Variables**:
+    Create a `.env.local` file:
     ```env
     MONGODB_URI=your_mongodb_connection_string
     NEXT_PUBLIC_APP_URL=http://localhost:3000
     SOCKET_PORT=3001
     ```
-4.  Run the production server:
+5.  **Run Development Server**:
     ```bash
-    npm run dev
+    yarn dev
     ```
-5.  Start the Socket Server (Hardware Gateway):
+6.  **Start Hardware Socket Gateway**:
     ```bash
-    npx ts-node socket-server.ts
+    npx tsx socket-server.ts
     ```
 
-### 2. Hardware Setup
+---
+
+## ⚙️ Configuration & Hardware
+
+<details>
+<summary><b>🛠️ Hardware Deployment</b></summary>
 
 1.  Navigate to `hardware/esp8266_rfid/`.
 2.  Open `esp8266_rfid.ino` in Arduino IDE.
-3.  Configure your WiFi credentials and Server WebSocket URL.
+3.  Configure WiFi credentials and Server WebSocket URL.
 4.  Upload to your ESP8266 device.
+</details>
 
----
+<details>
+<summary><b>🔧 Admin Controls</b></summary>
 
-## ⚙️ Configuration
-
-The system behavior can be managed via the **Admin Dashboard > Settings** page:
--   **Teacher Grace Period**: Time allowed for teachers to arrive before a slot is auto-cancelled.
--   **Entry Windows**: Punctuality thresholds for "Present" vs "Late" status.
--   **Operating Hours**: Start and end times for the entire system.
--   **Break Warnings**: Timing for pre-end-of-break alerts.
-
----
-
-## 🛡️ License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+The **Admin Dashboard > Settings** page allows management of:
+- **Grace Periods**: Time thresholds for teachers and students.
+- **Operating Hours**: System-wide start/end timings.
+- **Break Rules**: Configuration for gap periods and buzzers.
+</details>
 
 ---
 
 <p align="center">
-  Made with ❤️ by the Attenza Team
+  Made with 💜 by the Attenza Team<br>
+  <strong>AISAT Engineering College - ECE Department</strong>
 </p>
