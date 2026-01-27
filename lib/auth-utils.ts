@@ -17,6 +17,11 @@ export function hashPassword(password: string): string {
  * Verify a password against a stored hash
  */
 export function verifyPassword(password: string, storedValue: string): boolean {
+    // Handle plain-text passwords (Legacy or manual entry)
+    if (!storedValue.includes(":")) {
+        return password === storedValue
+    }
+
     const [salt, originalHash] = storedValue.split(":")
     if (!salt || !originalHash) return false
 

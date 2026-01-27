@@ -111,10 +111,22 @@ export default function HomePage() {
             <a href="#solutions" onClick={() => setMobileMenuOpen(false)} className="text-lg font-medium text-foreground">Solutions</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="text-lg font-medium text-foreground">Pricing</a>
             <hr className="border-border" />
-            <Link href="/login" className="text-lg font-medium text-muted-foreground">Sign In</Link>
-            <Link href="/register" className="w-full text-center py-3 rounded-lg bg-primary text-primary-foreground font-semibold">
-              Get Started
-            </Link>
+            {user ? (
+              <Link
+                href={user.role === "student" ? "/dashboard/student" : user.role === "teacher" ? "/dashboard/teacher" : "/dashboard/admin"}
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full text-center py-3 rounded-lg bg-primary text-primary-foreground font-semibold"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-lg font-medium text-muted-foreground">Sign In</Link>
+                <Link href="/register" onClick={() => setMobileMenuOpen(false)} className="w-full text-center py-3 rounded-lg bg-primary text-primary-foreground font-semibold">
+                  Get Started
+                </Link>
+              </>
+            )}
             <div className="flex items-center justify-between mt-2">
               <span className="text-muted-foreground">Switch Theme</span>
               <ModeToggle />

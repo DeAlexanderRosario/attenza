@@ -38,9 +38,14 @@ export async function getUsers(organizationId: string = "org-1") {
 
 export async function getUserById(id: string) {
   const db = await getDatabase()
-  const user = await db.collection<User>("users").findOne({
-    $or: [{ id }, { _id: new ObjectId(id) }],
-  })
+  const query: any = { $or: [{ id }] }
+
+  // Only search by ObjectId if it's a valid 24-char hex string
+  if (ObjectId.isValid(id)) {
+    query.$or.push({ _id: new ObjectId(id) })
+  }
+
+  const user = await db.collection<User>("users").findOne(query)
   return sanitizeUser(user)
 }
 
@@ -80,9 +85,13 @@ export async function getSlots(filters?: { departmentId?: string; year?: number;
 
 export async function getSlotById(id: string) {
   const db = await getDatabase()
-  const slot = await db.collection<Slot>("college_slots").findOne({
-    $or: [{ id }, { _id: new ObjectId(id) }],
-  })
+  const query: any = { $or: [{ id }] }
+
+  if (ObjectId.isValid(id)) {
+    query.$or.push({ _id: new ObjectId(id) })
+  }
+
+  const slot = await db.collection<Slot>("college_slots").findOne(query)
   if (!slot) return null
   return { ...slot, id: slot.id || slot._id.toString() }
 }
@@ -98,12 +107,20 @@ export async function createSlot(slotData: Omit<Slot, "id">) {
 
 export async function updateSlot(id: string, updates: Partial<Slot>) {
   const db = await getDatabase()
-  await db.collection("college_slots").updateOne({ $or: [{ id }, { _id: new ObjectId(id) }] }, { $set: updates })
+  const query: any = { $or: [{ id }] }
+  if (ObjectId.isValid(id)) {
+    query.$or.push({ _id: new ObjectId(id) })
+  }
+  await db.collection("college_slots").updateOne(query, { $set: updates })
 }
 
 export async function deleteSlot(id: string) {
   const db = await getDatabase()
-  await db.collection("college_slots").updateOne({ $or: [{ id }, { _id: new ObjectId(id) }] }, { $set: { isActive: false } })
+  const query: any = { $or: [{ id }] }
+  if (ObjectId.isValid(id)) {
+    query.$or.push({ _id: new ObjectId(id) })
+  }
+  await db.collection("college_slots").updateOne(query, { $set: { isActive: false } })
 }
 
 // Attendance operations
@@ -212,5 +229,9 @@ export async function createNotification(notificationData: Omit<Notification, "i
 
 export async function markNotificationRead(id: string) {
   const db = await getDatabase()
-  await db.collection("notifications").updateOne({ $or: [{ id }, { _id: new ObjectId(id) }] }, { $set: { read: true } })
+  const query: any = { $or: [{ id }] }
+  if (ObjectId.isValid(id)) {
+    query.$or.push({ _id: new ObjectId(id) })
+  }
+  await db.collection("notifications").updateOne(query, { $set: { read: true } })
 }
