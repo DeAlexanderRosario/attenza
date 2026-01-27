@@ -44,6 +44,8 @@ export function AdminSidebar() {
     const router = useRouter()
     const pathname = usePathname()
 
+    console.log("[AdminSidebar Debug] user:", user ? `${user.name} (${user.role})` : "null", "isLoading:", isLoading)
+
     const handleLogout = () => {
         logout()
         router.push("/login")

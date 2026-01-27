@@ -15,6 +15,7 @@ export function sanitizeUser(user: any) {
     points: user.points || 0,
     avatar: user.avatar,
     department: user.department,
+    organizationId: user.organizationId,
     year: user.year,
     semester: user.semester,
     createdAt: user.createdAt
