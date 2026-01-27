@@ -35,7 +35,7 @@ import {
 import Link from "next/link"
 
 export function AppSidebar() {
-    const { user, logout } = useAuth()
+    const { user, logout, isLoading } = useAuth()
     const router = useRouter()
     const pathname = usePathname()
 
@@ -77,6 +77,23 @@ export function AppSidebar() {
             icon: User,
         },
     ]
+
+    if (isLoading) {
+        return (
+            <Sidebar variant="inset" collapsible="icon" className="border-r border-white/5 bg-background/50 backdrop-blur-md">
+                <SidebarHeader>
+                    <div className="h-12 w-full animate-pulse bg-white/5 rounded-lg" />
+                </SidebarHeader>
+                <SidebarContent>
+                    <div className="space-y-2 p-2">
+                        {[1, 2, 3, 4, 5, 6].map(i => (
+                            <div key={i} className="h-10 w-full animate-pulse bg-white/5 rounded-lg" />
+                        ))}
+                    </div>
+                </SidebarContent>
+            </Sidebar>
+        )
+    }
 
     if (!user) return null
 
@@ -134,7 +151,7 @@ export function AppSidebar() {
                                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                                 >
                                     <Avatar className="h-8 w-8 rounded-lg">
-                                        <AvatarImage src={user.image} alt={user.name} />
+                                        <AvatarImage src={user.avatar} alt={user.name} />
                                         <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
                                             {user.name?.charAt(0).toUpperCase()}
                                         </AvatarFallback>
