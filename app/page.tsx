@@ -20,8 +20,10 @@ import {
   Smartphone,
 } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
+import { useAuth } from "@/lib/auth-context";
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -70,16 +72,27 @@ export default function HomePage() {
           </div>
 
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
-              Sign In
-            </Link>
+            {user ? (
+              <Link
+                href={user.role === "student" ? "/dashboard/student" : user.role === "teacher" ? "/dashboard/teacher" : "/dashboard/admin"}
+                className="px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+                  Sign In
+                </Link>
+                <Link
+                  href="/register"
+                  className="px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+                >
+                  Get Started
+                </Link>
+              </>
+            )}
             <ModeToggle />
-            <Link
-              href="/register"
-              className="px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
-            >
-              Get Started
-            </Link>
           </div>
 
           {/* Mobile Toggle */}

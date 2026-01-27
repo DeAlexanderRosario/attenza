@@ -34,6 +34,8 @@ export async function registerOrganization(data: {
     }
     await db.collection("organizations").insertOne(newOrg)
 
+    const { hashPassword } = await import("@/lib/auth-utils")
+
     // 3. Create Admin User
     const newAdmin: User = {
         id: crypto.randomUUID(),
@@ -43,7 +45,7 @@ export async function registerOrganization(data: {
         organizationId: orgId,
         points: 0,
         createdAt: new Date(),
-        password: password
+        password: password ? hashPassword(password) : undefined
     }
 
     await db.collection("users").insertOne(newAdmin)
@@ -123,11 +125,13 @@ export async function resetPassword(token: string, newPassword: string) {
         return { success: false, message: "Invalid or expired token." }
     }
 
+    const { hashPassword } = await import("@/lib/auth-utils")
+
     // Update Password and Clear Token
     await db.collection("users").updateOne(
         { resetToken: token },
         {
-            $set: { password: newPassword },
+            $set: { password: hashPassword(newPassword) },
             $unset: { resetToken: "", resetTokenExpiry: "" }
         }
     )

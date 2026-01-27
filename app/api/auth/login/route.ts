@@ -1,43 +1,43 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getUserByEmail } from "@/lib/db-helpers"
+import { getRawUserByEmail } from "@/lib/db-helpers"
+import { verifyPassword } from "@/lib/auth-utils"
 
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
 
-    // In production, verify password hash
-    const user = await getUserByEmail(email)
+    const user = await getRawUserByEmail(email)
 
-    if (!user) {
+    // Verify user exists and check hashed password
+    if (!user || !user.password || !verifyPassword(password, user.password)) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
-    // Verify password (simple string comparison for now as requested)
-    // In production, use bcrypt.compare(password, user.password)
-    if (user.password && user.password !== password) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
-    }
-
-    const response = NextResponse.json({ user })
+    // OPAQUE RESPONSE: No data returned in body
+    const response = NextResponse.json({ success: true })
 
     // Set Cookies for Server Side Access
     response.cookies.set("organizationId", user.organizationId, {
       httpOnly: true,
-      path: "/",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 7 // 1 week
+      path: "/",
     })
 
-    response.cookies.set("user_session", JSON.stringify({ id: user.id, role: user.role, organizationId: user.organizationId }), {
+    response.cookies.set("user_session", JSON.stringify({
+      id: user.id,
+      role: user.role,
+      organizationId: user.organizationId
+    }), {
       httpOnly: true,
-      path: "/",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 7
+      path: "/",
     })
 
     return response
   } catch (error) {
-    console.error("[v0] Login error:", error)
+    console.error("[Auth] Login error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

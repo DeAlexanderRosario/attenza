@@ -11,6 +11,7 @@ export function middleware(request: NextRequest) {
     // 2. Define Route Guards
     const isDashboard = pathname.startsWith("/dashboard")
     const isStudentRoute = pathname.startsWith("/dashboard/student")
+    const isTeacherRoute = pathname.startsWith("/dashboard/teacher")
     const isAdminRoute = pathname.startsWith("/dashboard/admin") || pathname.startsWith("/dashboard/super-admin")
 
     // Auth Routes (Public)
@@ -26,27 +27,30 @@ export function middleware(request: NextRequest) {
     }
 
     // B. Authenticated Access to Public Routes (Prevent Re-login)
-    // Optional: Redirect to dashboard if already logged in and trying to visit login
     if (isAuthRoute && session) {
-        if (session.role === "student") {
-            return NextResponse.redirect(new URL("/dashboard/student", request.url))
-        } else if (["admin", "super_admin", "teacher"].includes(session.role)) {
-            // Default admin landing
-            return NextResponse.redirect(new URL("/dashboard/admin", request.url))
-        }
+        if (session.role === "student") return NextResponse.redirect(new URL("/dashboard/student", request.url))
+        if (session.role === "teacher") return NextResponse.redirect(new URL("/dashboard/teacher", request.url))
+        if (["admin", "super_admin"].includes(session.role)) return NextResponse.redirect(new URL("/dashboard/admin", request.url))
     }
 
-    // C. Role-Based Access Control
+    // C. Role-Based Access Control (RBAC)
     if (session) {
+        // Enforce Student Access
         if (isStudentRoute && session.role !== "student") {
-            // Admin trying to access student view? Or just deny.
-            // For now, redirect to their own dashboard
-            return NextResponse.redirect(new URL("/dashboard/admin", request.url))
+            const dest = session.role === "teacher" ? "/dashboard/teacher" : "/dashboard/admin"
+            return NextResponse.redirect(new URL(dest, request.url))
         }
 
-        if (isAdminRoute && session.role === "student") {
-            // Student trying to access admin view
-            return NextResponse.redirect(new URL("/dashboard/student", request.url))
+        // Enforce Teacher Access
+        if (isTeacherRoute && session.role !== "teacher") {
+            const dest = session.role === "student" ? "/dashboard/student" : "/dashboard/admin"
+            return NextResponse.redirect(new URL(dest, request.url))
+        }
+
+        // Enforce Admin Access
+        if (isAdminRoute && !["admin", "super_admin"].includes(session.role)) {
+            const dest = session.role === "student" ? "/dashboard/student" : "/dashboard/teacher"
+            return NextResponse.redirect(new URL(dest, request.url))
         }
     }
 

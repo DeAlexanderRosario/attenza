@@ -39,9 +39,14 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
-      if (success) router.push("/");
-      else setError("Invalid credentials. Please try again.");
+      const role = await login(email, password);
+      if (role) {
+        if (role === "student") router.push("/dashboard/student");
+        else if (role === "teacher") router.push("/dashboard/teacher");
+        else router.push("/dashboard/admin");
+      } else {
+        setError("Invalid credentials. Please try again.");
+      }
     } catch (err) {
       setError("Connection error. Please try again later.");
     } finally {

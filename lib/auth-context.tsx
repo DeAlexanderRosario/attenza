@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast"
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<boolean>
+  login: (email: string, password: string) => Promise<string | null>
   logout: () => void
   isLoading: boolean
 }
@@ -18,20 +18,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
 
+  // On mount, check if user is already logged in by calling /api/auth/me
   useEffect(() => {
-    const storedUser = localStorage.getItem("user")
-    if (storedUser) {
+    async function checkSession() {
       try {
-        setUser(JSON.parse(storedUser))
+        const response = await fetch("/api/auth/me")
+        if (response.ok) {
+          const { user: foundUser } = await response.json()
+          setUser(foundUser)
+        }
       } catch (error) {
-        console.error("[v0] Error parsing stored user:", error)
-        localStorage.removeItem("user")
+        console.error("Session check error:", error)
+      } finally {
+        setIsLoading(false)
       }
     }
-    setIsLoading(false)
+    checkSession()
   }, [])
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  /**
+   * Secure Login: 
+   * returns the user's role on success, or null on failure.
+   * Opaque response from server - we fetch profile AFTER success.
+   */
+  const login = async (email: string, password: string): Promise<string | null> => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -40,14 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (response.ok) {
-        const { user: foundUser } = await response.json()
-        setUser(foundUser)
-        localStorage.setItem("user", JSON.stringify(foundUser))
-        toast({
-          title: "Login Successful",
-          description: `Welcome back, ${foundUser.name}!`,
-        })
-        return true
+        // Step 2: Fetch the full profile now that we are verified
+        const meResponse = await fetch("/api/auth/me")
+        if (meResponse.ok) {
+          const { user: foundUser } = await meResponse.json()
+          setUser(foundUser)
+          toast({
+            title: "Login Successful",
+            description: `Welcome back, ${foundUser.name}!`,
+          })
+          return foundUser.role
+        }
       } else {
         const errorData = await response.json()
         toast({
@@ -56,15 +69,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           variant: "destructive",
         })
       }
-      return false
+      return null
     } catch (error) {
-      console.error("[v0] Login error:", error)
+      console.error("Critical login error:", error)
       toast({
-        title: "Error",
-        description: "Unable to connect to the server",
+        title: "Security Error",
+        description: "Unable to establish a secure connection",
         variant: "destructive",
       })
-      return false
+      return null
     }
   }
 
@@ -76,15 +89,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setUser(null)
-    localStorage.removeItem("user")
     toast({
       title: "Logged Out",
       description: "You have been successfully logged out",
     })
+    // Force clean state
     window.location.href = "/login"
   }
 
-  return <AuthContext.Provider value={{ user, login, logout, isLoading }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

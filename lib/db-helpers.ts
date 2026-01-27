@@ -2,11 +2,38 @@ import { getDatabase } from "./mongodb"
 import type { User, Slot, AttendanceRecord, LeaderboardEntry, Achievement, Notification } from "./types"
 import { ObjectId } from "mongodb"
 
-// User operations
+// Utility to sanitize user data for client-side (STRICT WHITELIST)
+export function sanitizeUser(user: any) {
+  if (!user) return null
+
+  // Whitelist approach: only pick exact fields we need
+  return {
+    id: user.id || user._id?.toString(),
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    points: user.points || 0,
+    avatar: user.avatar,
+    department: user.department,
+    year: user.year,
+    semester: user.semester,
+    createdAt: user.createdAt
+  }
+}
+
+// Database raw access (SERVER-SIDE ONLY - INTERNAL)
+export async function getRawUserByEmail(email: string): Promise<User | null> {
+  const db = await getDatabase()
+  const user = await db.collection<User>("users").findOne({ email })
+  if (!user) return null
+  return { ...user, id: user.id || user._id?.toString() } as User
+}
+
+// User operations (Sanitized for API)
 export async function getUsers(organizationId: string = "org-1") {
   const db = await getDatabase()
   const users = await db.collection<User>("users").find({ organizationId }).toArray()
-  return users.map((u) => ({ ...u, id: u.id || u._id.toString() }))
+  return users.map(sanitizeUser)
 }
 
 export async function getUserById(id: string) {
@@ -14,15 +41,12 @@ export async function getUserById(id: string) {
   const user = await db.collection<User>("users").findOne({
     $or: [{ id }, { _id: new ObjectId(id) }],
   })
-  if (!user) return null
-  return { ...user, id: user.id || user._id.toString() }
+  return sanitizeUser(user)
 }
 
 export async function getUserByEmail(email: string) {
-  const db = await getDatabase()
-  const user = await db.collection<User>("users").findOne({ email })
-  if (!user) return null
-  return { ...user, id: user.id || user._id.toString() }
+  const user = await getRawUserByEmail(email)
+  return sanitizeUser(user)
 }
 
 export async function createUser(userData: Omit<User, "id">) {
@@ -32,7 +56,7 @@ export async function createUser(userData: Omit<User, "id">) {
     id: crypto.randomUUID(),
     createdAt: new Date(),
   })
-  return { ...userData, id: result.insertedId.toString() }
+  return sanitizeUser({ ...userData, id: result.insertedId.toString() })
 }
 
 // Slot operations
@@ -113,10 +137,10 @@ export async function createAttendanceRecord(recordData: Omit<AttendanceRecord, 
   })
 
   // Update student points
-  if (recordData.points > 0) {
+  if (recordData.pointsEarned > 0) {
     await db.collection("users").updateOne(
       { id: recordData.studentId }, // Match exact ID
-      { $inc: { points: recordData.points } }
+      { $inc: { points: recordData.pointsEarned } }
     )
   }
 

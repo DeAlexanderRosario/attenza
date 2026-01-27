@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       userId: recordData.studentId,
       type: "attendance",
       title: "Attendance Recorded",
-      message: `Your attendance has been recorded with ${recordData.points} points`,
+      message: `Your attendance has been recorded with ${recordData.pointsEarned} points`,
       read: false,
       timestamp: new Date(),
     })
