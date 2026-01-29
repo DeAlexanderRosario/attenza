@@ -18,6 +18,8 @@ export function sanitizeUser(user: any) {
     organizationId: user.organizationId,
     year: user.year,
     semester: user.semester,
+    rfidTag: user.rfidTag,
+    rollNumber: user.rollNumber,
     createdAt: user.createdAt
   }
 }
