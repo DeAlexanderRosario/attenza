@@ -159,6 +159,7 @@ export interface TimetableEntry {
 // Slot interface (Updated to match user schema)
 export interface Slot {
   id: string
+  classSlotId?: string
   name: string
   courseCode: string
   courseName: string

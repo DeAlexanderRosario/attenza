@@ -7,7 +7,16 @@ export async function getSessionOrganizationId(): Promise<string> {
     return orgId
 }
 
-export async function getSessionUser(): Promise<{ id: string, role: string, organizationId: string } | null> {
+export async function getSessionUser(): Promise<{
+    id: string,
+    role: string,
+    organizationId: string,
+    departmentId?: string,
+    classId?: string,
+    points?: number,
+    name?: string,
+    avatar?: string
+} | null> {
     const cookieStore = await cookies()
     const userCookie = cookieStore.get("user_session")?.value
     if (!userCookie) return null

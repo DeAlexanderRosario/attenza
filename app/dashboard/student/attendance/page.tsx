@@ -1,19 +1,29 @@
 import { AttendanceChart } from "@/components/student/attendance-chart"
 import { AttendanceTable } from "@/components/student/attendance-table"
+import { SubjectAttendanceTable } from "@/components/student/subject-attendance-table"
 import { WeeklyTimetable } from "@/components/student/weekly-timetable"
-import { getAttendanceHistory, getDetailedAttendance, getStudentTimetable } from "@/app/actions/student"
+import { getAttendanceHistory, getDetailedAttendance, getStudentTimetable, getStudentDashboardData, getSubjectWiseAttendance } from "@/app/actions/student"
+import { getCollegeSlots } from "@/app/actions/class-slots"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default async function AttendancePage({ searchParams }: { searchParams: { view?: string } }) {
-    const view = (await searchParams).view || "timetable"
+    const view = (await searchParams).view || "subjects"
 
     // Fetch data in parallel
-    const [history, detailedAttendance, slots] = await Promise.all([
+    const [history, dashboardData] = await Promise.all([
         getAttendanceHistory(),
-        getDetailedAttendance(),
-        getStudentTimetable()
+        getStudentDashboardData(),
     ])
+
+    const stats = dashboardData.stats
+    const slots = dashboardData.todaySlots // Or get all slots if needed for weekly view
+
+    // We need all slots for the WeeklyTimetable, getStudentDashboardData only returns today's
+    const allSlots = await getStudentTimetable()
+    const collegeSlots = await getCollegeSlots()
+    const detailedData = await getDetailedAttendance()
+    const subjectWiseData = await getSubjectWiseAttendance()
 
     return (
         <div className="space-y-6">
@@ -25,7 +35,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: {
                         <CardTitle>Attendance Trend</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <AttendanceChart data={history} overallPercentage={78} status="Safe" />
+                        <AttendanceChart data={history} overallPercentage={stats.overall} status={stats.status as any} />
                     </CardContent>
                 </Card>
                 <div className="space-y-6">
@@ -33,8 +43,13 @@ export default async function AttendancePage({ searchParams }: { searchParams: {
                         <CardHeader><CardTitle>Summary</CardTitle></CardHeader>
                         <CardContent>
                             <div className="text-center">
-                                <div className="text-4xl font-bold text-success">78%</div>
+                                <div className={`text-4xl font-bold ${stats.overall >= 75 ? 'text-success' : 'text-destructive'}`}>
+                                    {stats.overall}%
+                                </div>
                                 <div className="text-sm text-muted-foreground">Overall Attendance</div>
+                                <div className="mt-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                    {stats.attended} / {stats.total} Sessions Held
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -43,12 +58,24 @@ export default async function AttendancePage({ searchParams }: { searchParams: {
 
             <Tabs defaultValue={view} className="w-full">
                 <TabsList className="mb-4">
+                    <TabsTrigger value="subjects">Subject-wise</TabsTrigger>
                     <TabsTrigger value="timetable">Weekly Timetable</TabsTrigger>
                     <TabsTrigger value="history">Attendance History</TabsTrigger>
                 </TabsList>
 
+                <TabsContent value="subjects" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Subject-wise Attendance</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <SubjectAttendanceTable data={subjectWiseData as any} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
                 <TabsContent value="timetable" className="space-y-4">
-                    <WeeklyTimetable slots={slots} />
+                    <WeeklyTimetable slots={allSlots} collegeSlots={collegeSlots} />
                 </TabsContent>
 
                 <TabsContent value="history">
@@ -57,7 +84,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: {
                             <CardTitle>Detailed History</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <AttendanceTable data={detailedAttendance} />
+                            <AttendanceTable data={detailedData as any} />
                         </CardContent>
                     </Card>
                 </TabsContent>

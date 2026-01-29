@@ -146,6 +146,56 @@ export async function getAttendanceRecords(filters?: {
   return records.map((r) => ({ ...r, id: r.id || r._id.toString() }))
 }
 
+// Helper to calculate streak for a student
+async function getStudentStreak(studentId: string, organizationId: string): Promise<number> {
+  const db = await getDatabase()
+  const records = await db.collection("attendance")
+    .find({ studentId, organizationId, status: { $in: ["present", "late"] } })
+    .sort({ timestamp: -1 })
+    .toArray()
+
+  if (records.length === 0) return 0
+
+  let streak = 0
+  let lastDate = new Date()
+  lastDate.setHours(0, 0, 0, 0)
+
+  // Check if they attended today or yesterday to continue streak
+  const recordDates = records.map(r => {
+    const d = new Date(r.timestamp)
+    d.setHours(0, 0, 0, 0)
+    return d.getTime()
+  })
+
+  const uniqueDates = Array.from(new Set(recordDates))
+
+  // Find index of today or yesterday
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  let currentDate = today
+  if (!uniqueDates.includes(today.getTime())) {
+    if (!uniqueDates.includes(yesterday.getTime())) {
+      return 0 // Streak broken
+    }
+    currentDate = yesterday
+  }
+
+  for (let i = 0; i < uniqueDates.length; i++) {
+    const d = new Date(currentDate)
+    d.setDate(d.getDate() - i)
+    if (uniqueDates.includes(d.getTime())) {
+      streak++
+    } else {
+      break
+    }
+  }
+
+  return streak
+}
+
 export async function createAttendanceRecord(recordData: Omit<AttendanceRecord, "id">) {
   const db = await getDatabase()
   const result = await db.collection("attendance").insertOne({
@@ -166,12 +216,13 @@ export async function createAttendanceRecord(recordData: Omit<AttendanceRecord, 
 }
 
 // Leaderboard operations
-export async function getLeaderboard(filters?: { departmentId?: string; classId?: string }, limit: number = 20) {
+export async function getLeaderboard(filters?: { departmentId?: string; classId?: string; organizationId?: string }, limit: number = 20) {
   const db = await getDatabase()
   const matchQuery: any = { role: "student" }
 
   if (filters?.departmentId) matchQuery.departmentId = filters.departmentId
   if (filters?.classId) matchQuery.classId = filters.classId
+  if (filters?.organizationId) matchQuery.organizationId = filters.organizationId
 
   const students = await db.collection<User>("users").find(matchQuery).sort({ points: -1 }).limit(limit).toArray()
 
@@ -179,13 +230,22 @@ export async function getLeaderboard(filters?: { departmentId?: string; classId?
 
   for (let i = 0; i < students.length; i++) {
     const student = students[i]
-    // Simple Attendance Rate Calc
-    const totalPresent = await db.collection("attendance").countDocuments({ studentId: student.id, status: { $in: ["present", "late"] } })
-    const totalRequired = 50 // Placeholder: Ideally calculate total past slots for this student
-    const attendanceRate = Math.min(100, Math.round((totalPresent / totalRequired) * 100))
 
-    // Mock Streak
-    const streak = Math.floor(Math.random() * 10)
+    // Real Attendance Rate Calc: Attended Classes / Sessions Held for their class
+    const totalAttended = await db.collection("attendance").countDocuments({
+      studentId: student.id,
+      status: { $in: ["present", "late"] }
+    })
+
+    const sessionsHeld = await db.collection("active_sessions").countDocuments({
+      classId: student.classId,
+      status: { $in: ["ACTIVE", "CLOSED"] }
+    })
+
+    const attendanceRate = sessionsHeld > 0 ? Math.min(100, Math.round((totalAttended / sessionsHeld) * 100)) : 100
+
+    // Real Streak
+    const streak = await getStudentStreak(student.id || student._id.toString(), student.organizationId || "")
 
     leaderboard.push({
       rank: i + 1,
@@ -196,6 +256,78 @@ export async function getLeaderboard(filters?: { departmentId?: string; classId?
       streak,
       avatar: student.avatar,
     })
+  }
+
+  return leaderboard
+}
+
+export async function getDailyLeaderboard(filters?: { departmentId?: string; classId?: string; organizationId?: string }, limit: number = 20) {
+  const db = await getDatabase()
+  const startOfDay = new Date()
+  startOfDay.setHours(0, 0, 0, 0)
+
+  const matchQuery: any = {
+    timestamp: { $gte: startOfDay }
+  }
+  if (filters?.organizationId) matchQuery.organizationId = filters.organizationId
+
+  // 1. Aggregate points earned today per student
+  const aggregation = [
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: "$studentId",
+        dailyPoints: { $sum: "$pointsEarned" }
+      }
+    },
+    { $sort: { dailyPoints: -1 } },
+    { $limit: limit }
+  ]
+
+  const results = await db.collection("attendance").aggregate(aggregation).toArray()
+
+  // 2. Enrich with student details
+  const leaderboard: LeaderboardEntry[] = []
+
+  for (let i = 0; i < results.length; i++) {
+    const res = results[i]
+    const student = await db.collection<User>("users").findOne({
+      $or: [{ id: res._id }, { _id: ObjectId.isValid(res._id) ? new ObjectId(res._id) : null }] as any
+    })
+
+    if (!student) continue
+
+    // Still need streak and attendance rate for display consistency
+    const streak = await getStudentStreak(student.id || student._id.toString(), student.organizationId || "")
+
+    leaderboard.push({
+      rank: i + 1,
+      studentId: student.id || student._id.toString(),
+      studentName: student.name,
+      points: res.dailyPoints,
+      attendanceRate: 0, // Not relevant for daily, or hide in UI
+      streak,
+      avatar: student.avatar
+    })
+  }
+
+  // 3. Fallback: If nobody has points today, show top students with 0 points
+  if (leaderboard.length === 0) {
+    const studentQuery: any = { role: "student" }
+    if (filters?.departmentId) studentQuery.departmentId = filters.departmentId
+    if (filters?.classId) studentQuery.classId = filters.classId
+    if (filters?.organizationId) studentQuery.organizationId = filters.organizationId
+
+    const topStudents = await db.collection<User>("users").find(studentQuery).limit(limit).toArray()
+    return topStudents.map((s, idx) => ({
+      rank: idx + 1,
+      studentId: s.id || s._id.toString(),
+      studentName: s.name,
+      points: 0,
+      attendanceRate: 0,
+      streak: 0,
+      avatar: s.avatar
+    }))
   }
 
   return leaderboard

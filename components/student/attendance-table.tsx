@@ -47,14 +47,7 @@ export function AttendanceTable({ data }: AttendanceTableProps) {
                                     {format(new Date(record.timestamp), "p")}
                                 </TableCell>
                                 <TableCell>
-                                    {/* Ideally we would map slotId to Course Name here if not in record */}
-                                    {/* For now, assuming we might need to fetch or current mock data suffices, 
-                       but record doesn't have courseName. 
-                       In a real app, we'd probably join this data or having it in the record.
-                       Let's check the API response or Types again. 
-                       Record has slotId. 
-                   */}
-                                    {record.slotId}
+                                    {(record as any).subjectName || record.slotId}
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant={record.status === "present" ? "default" : "destructive"}>

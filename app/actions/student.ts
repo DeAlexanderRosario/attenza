@@ -6,6 +6,7 @@ import { ObjectId } from "mongodb"
 // import { getTimeSlots } from "./admin" // Deprecated for new system?
 import { getCollegeSlots } from "./class-slots" // New slot system
 import { getSessionUser } from "@/lib/session"
+import { sanitizeUser } from "@/lib/db-helpers"
 
 // --- HELPERS ---
 
@@ -18,8 +19,7 @@ async function getCurrentStudent() {
     if (!targetUser) targetUser = await db.collection<User>("users").findOne({ _id: new ObjectId(sessionUser.id) })
 
     if (targetUser && targetUser.role !== "student") return null
-
-    return targetUser ? { ...targetUser, id: targetUser.id || targetUser._id.toString() } : null
+    return sanitizeUser(targetUser) as unknown as User
 }
 
 // --- ATTENDANCE MARKING LOGIC ---
@@ -187,21 +187,82 @@ export async function getStudentDashboardData() {
     const sanitizedAttendance = todayAttendance.map(a => ({ ...a, id: a.id || a._id.toString() })) as unknown as AttendanceRecord[]
 
     // Stats
-    const totalAttendanceCount = await db.collection("attendance").countDocuments({ studentId: student.id })
-    // Simple mock logic for 'total potential classes' for now
-    const totalPotential = totalAttendanceCount + 5
-    const overallPct = totalPotential > 0 ? Math.round((totalAttendanceCount / totalPotential) * 100) : 100
+    const totalAttendanceCount = await db.collection("attendance").countDocuments({
+        studentId: student.id,
+        status: { $in: ["present", "late"] }
+    })
+
+    const totalSessionsHeld = await db.collection("active_sessions").countDocuments({
+        classId: student.classId,
+        status: { $in: ["ACTIVE", "CLOSED"] }
+    })
+
+    const overallPct = totalSessionsHeld > 0 ? Math.round((totalAttendanceCount / totalSessionsHeld) * 100) : 100
+
+    // Streak
+    const records = await db.collection("attendance")
+        .find({ studentId: student.id, status: { $in: ["present", "late"] } })
+        .sort({ timestamp: -1 })
+        .toArray()
+
+    let streak = 0
+    if (records.length > 0) {
+        const recordDates = records.map(r => {
+            const d = new Date(r.timestamp)
+            d.setHours(0, 0, 0, 0)
+            return d.getTime()
+        })
+        const uniqueDates = Array.from(new Set(recordDates))
+        const todayAtZero = new Date()
+        todayAtZero.setHours(0, 0, 0, 0)
+        const yesterdayAtZero = new Date(todayAtZero)
+        yesterdayAtZero.setDate(yesterdayAtZero.getDate() - 1)
+
+        let currentDate = todayAtZero
+        if (!uniqueDates.includes(todayAtZero.getTime())) {
+            if (uniqueDates.includes(yesterdayAtZero.getTime())) {
+                currentDate = yesterdayAtZero
+            } else {
+                streak = 0
+            }
+        }
+
+        if (streak !== 0 || uniqueDates.includes(currentDate.getTime())) {
+            for (let i = 0; i < uniqueDates.length; i++) {
+                const d = new Date(currentDate)
+                d.setDate(d.getDate() - i)
+                if (uniqueDates.includes(d.getTime())) {
+                    streak++
+                } else {
+                    break
+                }
+            }
+        }
+    }
+
+    // Leaderboard
+    const { getLeaderboard } = await import("@/lib/db-helpers")
+    const leaderboard = await getLeaderboard({
+        organizationId: student.organizationId,
+        departmentId: student.departmentId,
+        classId: student.classId
+    }, 5) // Limit to top 5 for dashboard
 
     return {
-        user: student,
+        user: sanitizeUser(student), // Double ensure plain object
         todaySlots,
-        todayAttendance: sanitizedAttendance,
+        todayAttendance: sanitizedAttendance.map(a => ({
+            ...a,
+            timestamp: a.timestamp.toISOString() // Serialize dates
+        })),
         stats: {
             overall: overallPct,
-            attended: todayAttendance.length,
-            total: todaySlots.length,
-            status: overallPct >= 75 ? "Safe" : "At Risk"
+            attended: totalAttendanceCount,
+            total: totalSessionsHeld,
+            status: overallPct >= 75 ? "Safe" : "At Risk",
+            streak
         },
+        leaderboard,
         subjectsAtRisk: []
     }
 }
@@ -210,39 +271,71 @@ export async function getAttendanceHistory() {
     const student = await getCurrentStudent()
     if (!student) return []
 
-    // For now, returning mock history data suitable for the chart
-    // Real implementation would aggregate daily attendance
-    return [
-        { date: "Mon", present: 4, absent: 0, late: 1 },
-        { date: "Tue", present: 5, absent: 0, late: 0 },
-        { date: "Wed", present: 3, absent: 1, late: 1 },
-        { date: "Thu", present: 5, absent: 0, late: 0 },
-        { date: "Fri", present: 4, absent: 1, late: 0 },
-        { date: "Sat", present: 2, absent: 0, late: 0 },
-    ]
+    const db = await getDB()
+    const last7Days = new Date()
+    last7Days.setDate(last7Days.getDate() - 7)
+    last7Days.setHours(0, 0, 0, 0)
+
+    const records = await db.collection("attendance").find({
+        studentId: student.id,
+        timestamp: { $gte: last7Days }
+    }).toArray()
+
+    const dailyData: Record<string, { present: number, absent: number, late: number }> = {}
+
+    // Initialize last 7 days
+    for (let i = 0; i < 7; i++) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' })
+        dailyData[dayName] = { present: 0, absent: 0, late: 0 }
+    }
+
+    records.forEach(r => {
+        const dayName = new Date(r.timestamp).toLocaleDateString('en-US', { weekday: 'short' })
+        if (dailyData[dayName]) {
+            if (r.status === "present") dailyData[dayName].present++
+            else if (r.status === "late") dailyData[dayName].late++
+            else if (r.status === "absent") dailyData[dayName].absent++
+        }
+    })
+
+    return Object.entries(dailyData).reverse().map(([date, stats]) => ({
+        date,
+        attended: stats.present + stats.late,
+        total: stats.present + stats.late + stats.absent
+    }))
 }
 
 export async function getDetailedAttendance() {
     const student = await getCurrentStudent()
     if (!student) return []
 
-    const db = await getDB()
-    const records = await db.collection("attendance")
-        .find({ studentId: student.id })
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .toArray()
+    const { getStudentAttendanceDetails } = await import("./attendance")
+    const details = await getStudentAttendanceDetails(student.id)
 
-    // Enrich with slot details if possible
-    // For now returning raw records adjusted for UI
-    return records.map(r => ({
-        id: r.id || r._id.toString(),
-        date: r.timestamp, // UI expects date object or string
-        status: r.status,
-        subject: "General", // TODO: Join with timetable to get subject
-        time: r.timestamp.toLocaleTimeString(),
-        points: r.pointsEarned
-    }))
+    if (!details) return []
+
+    return details.logs.map(log => ({
+        id: log.id,
+        timestamp: new Date(log.date),
+        status: log.status as "present" | "late" | "absent",
+        subjectName: log.subject,
+        pointsEarned: log.points,
+        slotId: "" // Dummy for type compatibility
+    })) as any // Using any to bypass strict AttendanceRecord if needed, or we'll update the component
+}
+
+export async function getSubjectWiseAttendance() {
+    const student = await getCurrentStudent()
+    if (!student) return []
+
+    const { getStudentAttendanceDetails } = await import("./attendance")
+    const details = await getStudentAttendanceDetails(student.id)
+
+    if (!details) return []
+
+    return details.subjects
 }
 
 export async function getStudentTimetable(): Promise<Slot[]> {
@@ -267,6 +360,7 @@ export async function getStudentTimetable(): Promise<Slot[]> {
 
         mappedSlots.push({
             id: entry.id || entry._id.toString(),
+            classSlotId: entry.classSlotId,
             name: entry.subjectName,
             courseCode: entry.subjectCode,
             courseName: entry.subjectName,
