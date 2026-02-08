@@ -4,6 +4,7 @@ import { getDB } from "@/lib/db"
 import { ObjectId } from "mongodb"
 import { getSessionOrganizationId } from "@/lib/session"
 import { User, AttendanceRecord } from "@/lib/types"
+import crypto from "crypto"
 
 // Types for Filters
 export interface AttendanceFilter {
@@ -616,4 +617,99 @@ export async function getInRoomStatus(slotId: string, dateStr: string) {
     ]).toArray()
 
     return attendance
+}
+
+export async function manualMarkAttendance(data: {
+    studentId: string,
+    slotId: string,
+    status: "present" | "late"
+}) {
+    const db = await getDB()
+    const orgId = await getSessionOrganizationId()
+    const now = new Date()
+
+    // Check if user exists
+    const user = await db.collection<User>("users").findOne({ id: data.studentId, organizationId: orgId })
+    if (!user) return { success: false, error: "Student not found." }
+
+    // Check for duplicate for today/slot
+    const startOfDay = new Date(now)
+    startOfDay.setHours(0, 0, 0, 0)
+
+    const existing = await db.collection("attendance").findOne({
+        studentId: data.studentId,
+        slotId: data.slotId,
+        timestamp: { $gte: startOfDay }
+    })
+
+    if (existing) {
+        return { success: false, error: "Attendance already marked for this slot." }
+    }
+
+    // Define points
+    const points = data.status === "present" ? 10 : 5
+
+    const record: AttendanceRecord = {
+        id: crypto.randomUUID(),
+        studentId: data.studentId,
+        slotId: data.slotId,
+        rfidTag: user.rfidTag || "MANUAL",
+        timestamp: now,
+        status: data.status,
+        pointsEarned: points,
+        organizationId: orgId
+    }
+
+    await db.collection("attendance").insertOne(record)
+
+    // Update student points
+    await db.collection("users").updateOne(
+        { id: data.studentId },
+        { $inc: { points: points } }
+    )
+
+    return { success: true, message: `Marked as ${data.status} manually.` }
+}
+
+export async function getDefaulterList(threshold = 75) {
+    const db = await getDB()
+    const orgId = await getSessionOrganizationId()
+
+    // 1. Get all students
+    const students = await db.collection("users").find({ role: "student", organizationId: orgId }).toArray()
+
+    // 2. Aggregate attendance by student
+    const stats = await db.collection("attendance").aggregate([
+        { $match: { organizationId: orgId } },
+        {
+            $group: {
+                _id: "$studentId",
+                total: { $sum: 1 },
+                present: { $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] } }
+            }
+        },
+        {
+            $project: {
+                studentId: "$_id",
+                attendanceRate: { $multiply: [{ $divide: ["$present", "$total"] }, 100] },
+                attended: "$present",
+                totalClasses: "$total"
+            }
+        },
+        { $match: { attendanceRate: { $lt: threshold } } }
+    ]).toArray()
+
+    // 3. Join with student data
+    const defaulters = stats.map(stat => {
+        const student = students.find(s => s.id === stat.studentId)
+        return {
+            ...stat,
+            name: student?.name || "Unknown",
+            email: student?.email,
+            department: student?.department,
+            registerNumber: student?.registerNumber
+        }
+    })
+
+    return defaulters
 }
