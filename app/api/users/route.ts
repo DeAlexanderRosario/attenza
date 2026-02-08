@@ -1,9 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getUsers, createUser } from "@/lib/db-helpers"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const users = await getUsers()
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get("organizationId") || "org-1"
+    const role = searchParams.get("role") || undefined
+    const departmentId = searchParams.get("departmentId") || undefined
+
+    const users = await getUsers(organizationId, role, departmentId)
     return NextResponse.json(users)
   } catch (error) {
     console.error("[v0] Get users error:", error)

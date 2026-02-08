@@ -33,9 +33,13 @@ export async function getRawUserByEmail(email: string): Promise<User | null> {
 }
 
 // User operations (Sanitized for API)
-export async function getUsers(organizationId: string = "org-1") {
+export async function getUsers(organizationId: string = "org-1", role?: string, departmentId?: string) {
   const db = await getDatabase()
-  const users = await db.collection<User>("users").find({ organizationId }).toArray()
+  const query: any = { organizationId }
+  if (role) query.role = role
+  if (departmentId) query.departmentId = departmentId
+
+  const users = await db.collection<User>("users").find(query).toArray()
   return users.map(sanitizeUser)
 }
 

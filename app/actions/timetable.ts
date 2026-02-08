@@ -190,3 +190,33 @@ export async function deleteTimetableEntriesBySlot(slotId: string, organizationI
         modifiedCount: result.modifiedCount
     }
 }
+
+// Get all timetable entries for a specific teacher across all classes
+export async function getTeacherTimetable(teacherId: string, organizationId?: string): Promise<(ClassTimetableEntry & { classId: string, className: string })[]> {
+    const db = await getDB()
+    const orgId = organizationId || await getSessionOrganizationId()
+
+    // Find all classes in the organization
+    const classes = await db.collection("classes").find({
+        organizationId: orgId,
+        "timetable.teacherId": teacherId
+    }).toArray()
+
+    const teacherEntries: (ClassTimetableEntry & { classId: string, className: string })[] = []
+
+    classes.forEach(cls => {
+        if (cls.timetable) {
+            cls.timetable.forEach((entry: ClassTimetableEntry) => {
+                if (entry.teacherId === teacherId) {
+                    teacherEntries.push({
+                        ...entry,
+                        classId: cls.id,
+                        className: cls.name
+                    })
+                }
+            })
+        }
+    })
+
+    return teacherEntries
+}

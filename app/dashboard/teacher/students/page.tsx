@@ -17,11 +17,21 @@ export default function TeacherStudentsPage() {
 
     useEffect(() => {
         async function fetchStudents() {
+            if (!user) return
             try {
-                const res = await fetch("/api/users")
+                const params = new URLSearchParams()
+                params.append("organizationId", user.organizationId || "org-1")
+                params.append("role", "student")
+
+                // If the teacher has specific departments, filter by them
+                // For now, using the user's primary departmentId if it exists
+                if (user.departmentId) {
+                    params.append("departmentId", user.departmentId)
+                }
+
+                const res = await fetch(`/api/users?${params.toString()}`)
                 const data = await res.json()
-                const studentUsers = data.filter((u: User) => u.role === "student")
-                setStudents(studentUsers)
+                setStudents(data)
             } catch (error) {
                 console.error("Error fetching students:", error)
             } finally {
@@ -29,7 +39,7 @@ export default function TeacherStudentsPage() {
             }
         }
         fetchStudents()
-    }, [])
+    }, [user])
 
     const filteredStudents = students.filter(s =>
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
