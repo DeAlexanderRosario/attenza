@@ -93,16 +93,16 @@ export function AdminSidebar() {
             url: "/dashboard/admin/attendance",
             icon: ClipboardCheck,
         },
-        {
-            title: "Analytics",
-            url: "/dashboard/admin/analytics",
-            icon: BarChart3,
-        },
-        {
-            title: "Tracker",
-            url: "/dashboard/admin/tracker",
-            icon: MapPin,
-        },
+        // {
+        // title: "Analytics",
+        //  url: "/dashboard/admin/analytics",
+        //  icon: BarChart3,
+        // },
+        //  {
+        //   title: "Tracker",
+        //   url: "/dashboard/admin/tracker",
+        //    icon: MapPin,
+        // },
         {
             title: "Settings",
             url: "/dashboard/admin/settings",
