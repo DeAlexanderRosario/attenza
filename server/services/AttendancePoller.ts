@@ -175,7 +175,7 @@ export class AttendancePoller {
             try {
                 await this.whatsAppService.sendDirectMessage(
                     student.phoneNumber,
-                    `⚠️ *Attenza Attendance Warning* ⚠️\n` +
+                    `⚠️ *TrueCheck Attendance Warning* ⚠️\n` +
                     `━━━━━━━━━━━━━━━━━━━━\n` +
                     `📢 *TEACHER ARRIVAL DETECTED*\n\n` +
                     `📍 *Subject:* ${subjectName}\n` +

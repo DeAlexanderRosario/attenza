@@ -8,7 +8,7 @@ import type { ReactNode } from "react"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Attenza - Smart RFID Attendance System",
+  title: "TrueCheck - Smart RFID Attendance System",
   description: "Real-time attendance tracking with gamification and analytics",
   generator: "",
   icons: {

@@ -108,7 +108,7 @@ export function AppSidebar() {
                                     <SquareTerminal className="size-4" />
                                 </div>
                                 <div className="grid flex-1 text-left text-sm leading-tight">
-                                    <span className="truncate font-semibold">Attenza</span>
+                                    <span className="truncate font-semibold">TrueCheck</span>
                                     <span className="truncate text-xs">Student Portal</span>
                                 </div>
                             </Link>

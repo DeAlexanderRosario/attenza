@@ -3,28 +3,28 @@ import nodemailer from "nodemailer"
 // Configure nodemailer with Gmail SMTP
 // Note: User needs to provide GMAIL_USER and GMAIL_PASS in .env
 const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
-    },
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
+  },
 })
 
 export async function sendPasswordResetEmail(email: string, token: string) {
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
-        console.warn("⚠️ Mailer skipped: GMAIL_USER or GMAIL_PASS not set.")
-        console.log(`[Mock Email] To: ${email} | Subject: Password Reset | Token: ${token}`)
-        return
-    }
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
+    console.warn("⚠️ Mailer skipped: GMAIL_USER or GMAIL_PASS not set.")
+    console.log(`[Mock Email] To: ${email} | Subject: Password Reset | Token: ${token}`)
+    return
+  }
 
-    try {
-        const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password?token=${token}`
+  try {
+    const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password?token=${token}`
 
-        await transporter.sendMail({
-            from: `"Attenza Support" <${process.env.GMAIL_USER}>`,
-            to: email,
-            subject: "Reset Your Password - Attenza",
-            html: `
+    await transporter.sendMail({
+      from: `"TrueCheck Support" <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject: "Reset Your Password - TrueCheck",
+      html: `
 <!DOCTYPE html>
 <html>
 <head>
@@ -42,7 +42,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
           <!-- Header -->
           <tr>
             <td style="padding: 30px 40px; background-color: #18181b; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 1px;">ATTENZA</h1>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 1px;">TRUECHECK</h1>
             </td>
           </tr>
 
@@ -55,7 +55,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
                 Hello,
               </p>
               <p style="margin: 0 0 30px; line-height: 1.6; color: #555;">
-                We received a request to reset the password for your Attenza account. If you didn't make this request, you can safely ignore this email.
+                We received a request to reset the password for your TrueCheck account. If you didn't make this request, you can safely ignore this email.
               </p>
 
               <!-- Button -->
@@ -84,7 +84,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
           <tr>
             <td style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #eee;">
               <p style="margin: 0; font-size: 12px; color: #888;">
-                &copy; ${new Date().getFullYear()} Attenza System. All rights reserved.
+                &copy; ${new Date().getFullYear()} TrueCheck System. All rights reserved.
               </p>
             </td>
           </tr>
@@ -95,10 +95,10 @@ export async function sendPasswordResetEmail(email: string, token: string) {
 </body>
 </html>
       `,
-        })
-        console.log(`✅ Password reset email sent to ${email}`)
-    } catch (error) {
-        console.error("❌ Error sending email:", error)
-        throw new Error("Failed to send email")
-    }
+    })
+    console.log(`✅ Password reset email sent to ${email}`)
+  } catch (error) {
+    console.error("❌ Error sending email:", error)
+    throw new Error("Failed to send email")
+  }
 }

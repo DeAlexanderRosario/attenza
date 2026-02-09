@@ -32,7 +32,7 @@ export function Navigation() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <Scan className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold text-foreground">Attenza</span>
+          <span className="text-xl font-bold text-foreground">TrueCheck</span>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

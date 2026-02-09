@@ -35,7 +35,7 @@ export class WhatsAppService {
             },
             printQRInTerminal: false, // We'll handle it manually for better logging
             logger: this.logger,
-            browser: ["Attenza Server", "Chrome", "1.0.0"]
+            browser: ["TrueCheck Server", "Chrome", "1.0.0"]
         });
 
         this.sock.ev.on("creds.update", saveCreds);
@@ -121,7 +121,7 @@ export class WhatsAppService {
         const day = now.toLocaleDateString('en-IN', { weekday: 'long' });
 
         const message =
-            `🚀 *Attenza Class Alert* 🚀\n` +
+            `🚀 *TrueCheck Class Alert* 🚀\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
             `🎓 *CLASS IS STARTING NOW* 🎓\n\n` +
             `📘 *Subject:* ${sub}\n` +
@@ -141,7 +141,7 @@ export class WhatsAppService {
 
         const chatId = this.formatChatId(phone);
         const message =
-            `⏳ *Attenza Time Alert* ⏳\n` +
+            `⏳ *TrueCheck Time Alert* ⏳\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
             `☕ *BREAK ENDING SOON* ☕\n\n` +
             `🏃‍♂️ Your next session starts in *${minsLeft} minutes*.\n\n` +

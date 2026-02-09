@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="attenza_banner.png" width="100%" alt="Attenza Banner" />
+  <img src="truecheck_banner.png" width="100%" alt="TrueCheck Banner" />
 </p>
 
-# <p align="center">🎓 Attenza: Smart Attendance System</p>
+# <p align="center">🎓 TrueCheck: Smart Attendance System</p>
 
 <p align="center">
   <strong>A premium, real-time attendance management ecosystem powered by RFID and WhatsApp.</strong>
@@ -20,7 +20,7 @@
 > [!IMPORTANT]
 > **Project Submission**: This project is submitted as a mini project by a 3rd-year B.Tech student of the Electronics and Communication Engineering Department, **AISAT Engineering College**.
 
-**Attenza** is a state-of-the-art, hardware-integrated student attendance management system. Designed for precision and ease of use, it leverages RFID technology for seamless check-ins and automated WhatsApp notifications to keep students informed in real-time.
+**TrueCheck** is a state-of-the-art, hardware-integrated student attendance management system. Designed for precision and ease of use, it leverages RFID technology for seamless check-ins and automated WhatsApp notifications to keep students informed in real-time.
 
 ---
 
@@ -100,8 +100,8 @@ flowchart TD
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/DeAlexanderRosario/attenza.git
-    cd attenza
+    git clone https://github.com/DeAlexanderRosario/truecheck.git
+    cd truecheck
     ```
 2.  **Install dependencies**:
     ```bash
@@ -152,6 +152,6 @@ The **Admin Dashboard > Settings** page allows management of:
 ---
 
 <p align="center">
-  Made with 💜 by the Attenza Team<br>
+  Made with 💜 by the TrueCheck Team<br>
   <strong>AISAT Engineering College - ECE Department</strong>
 </p>

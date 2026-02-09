@@ -50,7 +50,7 @@ button:hover{transform:translateY(-2px);box-shadow:0 20px 25px -5px rgba(99,102,
 document.addEventListener("DOMContentLoaded",()=>{
   const form=document.querySelector("form"); if(!form) return;
   const wrap=document.createElement("div"); wrap.className="wrap";
-  const title=document.createElement("h1"); title.innerText="Attenza";
+  const title=document.createElement("h1"); title.innerText="TrueCheck";
   const sub=document.createElement("h3"); sub.innerText="Device Setup";
   document.body.appendChild(wrap);
   wrap.appendChild(title); wrap.appendChild(sub); wrap.appendChild(form);
@@ -109,7 +109,7 @@ void startConfigPortal() {
   wifiManager.addParameter(&custom_device_id);
   wifiManager.setConfigPortalTimeout(180); 
   
-  if (!wifiManager.startConfigPortal("Attenza_Config_Mode")) {
+  if (!wifiManager.startConfigPortal("TrueCheck_Config_Mode")) {
     Serial.println(F("[WiFi] Timeout. Restarting..."));
     delay(1000);
     ESP.restart();
@@ -233,7 +233,7 @@ void setup() {
   pinMode(BUZZER, OUTPUT);
   delay(500); 
 
-  Serial.println(F("\n[Boot] Attenza Started"));
+  Serial.println(F("\n[Boot] TrueCheck Started"));
 
   if (LittleFS.begin()) {
     if (LittleFS.exists("/config.json")) {
