@@ -39,30 +39,169 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // --- UI STYLE ---
 const char* customUI = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrueCheck Setup</title>
+
 <style>
-:root{--p:#6366f1;--bg:#0a0518;--card:rgba(255,255,255,0.03)}
-html,body{margin:0;padding:20px;background:radial-gradient(circle at 50% 0%,#1a1033 0%,var(--bg) 100%);font-family:'Segoe UI',Roboto,sans-serif;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
-.wrap{width:100%;max-width:400px;padding:2.5rem 1.5rem;background:var(--card);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.1);border-radius:2rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);text-align:center;box-sizing:border-box}
-h1{font-size:2rem;margin:0 0 0.5rem;background:linear-gradient(135deg,#fff 0%,#a5b4fc 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-1px}
-h3{font-weight:400;font-size:0.9rem;opacity:0.6;margin-bottom:2rem;letter-spacing:1px;text-transform:uppercase}
-input{width:100%;padding:0.9rem 1.2rem;margin-bottom:1.2rem;border-radius:1rem;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#fff;font-size:1rem;box-sizing:border-box;transition:0.3s}
-input:focus{outline:none;border-color:var(--p);box-shadow:0 0 0 4px rgba(99,102,241,0.2)}
-button{width:100%;padding:1rem;border:none;border-radius:1rem;background:var(--p);color:#fff;font-weight:600;font-size:1rem;cursor:pointer;transition:0.3s;box-shadow:0 10px 15px -3px rgba(99,102,241,0.3)}
-button:hover{transform:translateY(-2px);box-shadow:0 20px 25px -5px rgba(99,102,241,0.4);filter:brightness(1.1)}
-::placeholder{color:rgba(255,255,255,0.3)}
-@media(max-width:480px){.wrap{padding:2rem 1rem}.wrap h1{font-size:1.75rem}}
+:root{
+  --primary:#6366f1;
+  --bg:#0b1220;
+  --card:#111827;
+  --text:#e5e7eb;
+  --muted:#9ca3af;
+}
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+body{
+  font-family: system-ui, -apple-system, sans-serif;
+  background: linear-gradient(180deg,#0b1220,#020617);
+  color:var(--text);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+  padding:15px;
+}
+
+/* Card */
+.container{
+  width:100%;
+  max-width:380px;
+  background:var(--card);
+  padding:25px 20px;
+  border-radius:18px;
+  box-shadow:0 15px 40px rgba(0,0,0,0.6);
+  animation:fadeIn 0.5s ease;
+}
+
+/* Title */
+h1{
+  text-align:center;
+  font-size:24px;
+  margin-bottom:5px;
+}
+
+.sub{
+  text-align:center;
+  font-size:13px;
+  color:var(--muted);
+  margin-bottom:25px;
+}
+
+/* Inputs */
+.field{
+  position:relative;
+  margin-bottom:18px;
+}
+
+input{
+  width:100%;
+  padding:14px;
+  border-radius:12px;
+  border:1px solid #1f2937;
+  background:#020617;
+  color:#fff;
+  font-size:14px;
+}
+
+input:focus{
+  outline:none;
+  border-color:var(--primary);
+}
+
+/* Labels */
+label{
+  position:absolute;
+  top:-8px;
+  left:12px;
+  background:var(--card);
+  padding:0 6px;
+  font-size:11px;
+  color:var(--muted);
+}
+
+/* Button */
+button{
+  width:100%;
+  padding:14px;
+  border:none;
+  border-radius:12px;
+  background:var(--primary);
+  color:#fff;
+  font-size:15px;
+  font-weight:600;
+  cursor:pointer;
+  transition:0.2s;
+}
+
+button:hover{
+  background:#4f46e5;
+}
+
+button:active{
+  transform:scale(0.97);
+}
+
+/* Footer */
+.footer{
+  text-align:center;
+  font-size:11px;
+  color:var(--muted);
+  margin-top:15px;
+}
+
+/* Animation */
+@keyframes fadeIn{
+  from{opacity:0; transform:translateY(10px);}
+  to{opacity:1; transform:translateY(0);}
+}
+
+/* Mobile Optimization */
+@media(max-width:400px){
+  .container{
+    padding:20px 15px;
+  }
+  h1{
+    font-size:20px;
+  }
+}
 </style>
-<script>
-document.addEventListener("DOMContentLoaded",()=>{
-  const form=document.querySelector("form"); if(!form) return;
-  const wrap=document.createElement("div"); wrap.className="wrap";
-  const title=document.createElement("h1"); title.innerText="TrueCheck";
-  const sub=document.createElement("h3"); sub.innerText="Device Setup";
-  document.body.appendChild(wrap);
-  wrap.appendChild(title); wrap.appendChild(sub); wrap.appendChild(form);
-});
-</script>
+</head>
+
+<body>
+
+<div class="container">
+  <h1>TrueCheck</h1>
+  <div class="sub">Quick Device Setup</div>
+
+  <form action="/save" method="POST">
+    
+    <div class="field">
+      <label>WiFi Name</label>
+      <input type="text" name="ssid" required>
+    </div>
+
+    <div class="field">
+      <label>Password</label>
+      <input type="password" name="password" required>
+    </div>
+
+    <button type="submit">Connect Device</button>
+  </form>
+
+  <div class="footer">ESP8266 Setup Portal</div>
+</div>
+
+</body>
+</html>
 )rawliteral";
 
 // --- CUSTOM ICONS ---
