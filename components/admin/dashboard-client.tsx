@@ -31,7 +31,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         // For this setup, we'll try the direct port or relative path if proxied.
         // Since package.json has "socket.io", we use it.
 
-        const socket = io("http://localhost:3001") // Direct connection to custom server
+        const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001")
 
         socket.on("connect", () => {
             console.log("Connected to Real-time Server")

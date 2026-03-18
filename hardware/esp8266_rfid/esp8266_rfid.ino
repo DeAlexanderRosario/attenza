@@ -16,6 +16,7 @@
 #define SS_PIN   D8  // GPIO 15 (The problematic pin)
 #define RST_PIN  D1
 #define BUZZER   D0
+#define CONFIG_BTN D2 // D7 is used by SPI! D2 is free.
 
 #define SDA_PIN  D3   // GPIO 4 G 
 #define SCL_PIN  D4   // GPIO 2 w
@@ -368,6 +369,7 @@ void setup() {
   // -----------------------------------------------------------
 
   pinMode(BUZZER, OUTPUT);
+  pinMode(CONFIG_BTN, INPUT_PULLUP);
   delay(500); 
 
   // Initialize I2C and LCD
@@ -442,6 +444,15 @@ void setup() {
 // --- LOOP ---
 void loop() {
   webSocket.loop();
+
+  // Check Config Button
+  if (digitalRead(CONFIG_BTN) == LOW) {
+    delay(50); // Debounce
+    if (digitalRead(CONFIG_BTN) == LOW) {
+      Serial.println(F("[Sys] Config Button Pressed!"));
+      startConfigPortal();
+    }
+  }
 
   // NON-BLOCKING SERIAL (Fixes the crash)
   while (Serial.available()) {

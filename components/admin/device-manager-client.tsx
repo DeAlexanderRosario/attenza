@@ -53,7 +53,7 @@ export function DeviceManagerClient({
     const [pairingData, setPairingData] = useState<{ room: string, placement: "inside" | "outside", classId?: string }>({ room: "", placement: "outside" })
 
     useEffect(() => {
-        const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3003")
+        const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001")
         socket.on("device_activity", (data: DeviceLog) => {
             setLogs(prev => [data, ...prev].slice(0, 20))
             if (data.type === "AUTH_SUCCESS") {

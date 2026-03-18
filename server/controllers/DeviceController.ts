@@ -62,6 +62,24 @@ export class DeviceController {
             // Trigger notifications and buzzer on inside units
             await this.insideController.triggerBreakWarning(room);
             await this.triggerBuzzer(room, message || "Break Re-verification Started");
+            
+            // Check if this is the 3-minute warning by matching the message format or simply context
+            const settings = this.configService.getSettings();
+            if (message && message.includes("Minute Break Warning")) {
+                console.log(`[DeviceController] Sending WhatsApp break warnings for students in ${room}`);
+                try {
+                    const studentsInRoom = await this.attendanceService.getStudentsInRoom(room);
+                    for (const studentId of studentsInRoom) {
+                        try {
+                            await this.whatsAppService.sendBreakWarning(settings.breakWarningMins, studentId);
+                        } catch (err) {
+                            console.error(`[DeviceController] Failed to send break warning to ${studentId}:`, err);
+                        }
+                    }
+                } catch (err) {
+                    console.error(`[DeviceController] Failed to fetch students for break warning:`, err);
+                }
+            }
         };
 
         // Bind ModeManager callbacks

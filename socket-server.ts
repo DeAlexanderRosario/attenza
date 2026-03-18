@@ -168,10 +168,10 @@ async function startServer() {
         });
 
         // --- 5. LISTEN ---
-        httpServer.listen(port, () => {
-            console.log(`> 🚀 Production Attendance Server running on port ${port}`);
-            console.log(`> 🔗 WebSocket: ws://localhost:${port}/ws`);
-            console.log(`> 🔗 Socket.IO: http://localhost:${port}`);
+        httpServer.listen(port, "0.0.0.0", () => {
+            console.log(`> 🚀 Production Attendance Server running on 0.0.0.0:${port}`);
+            console.log(`> 🔗 WebSocket: ws://0.0.0.0:${port}/ws`);
+            console.log(`> 🔗 Socket.IO: http://0.0.0.0:${port}`);
             console.log(`> 🎯 System Mode: ${modeManager.getCurrentMode()}`);
         });
 

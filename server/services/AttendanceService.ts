@@ -156,6 +156,17 @@ export class AttendanceService {
     }
 
     /**
+     * Get all students currently IN a specific room
+     */
+    public async getStudentsInRoom(room: string): Promise<string[]> {
+        const records = await this.inRoomStatusCollection.find({ 
+            room, 
+            status: "IN" 
+        }).toArray();
+        return records.map(r => r.studentId);
+    }
+
+    /**
      * Verify attendance (inside unit scan)
      */
     public async verifyAttendance(
