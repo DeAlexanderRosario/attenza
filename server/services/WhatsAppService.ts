@@ -3,7 +3,8 @@ import makeWASocket, {
     useMultiFileAuthState,
     makeCacheableSignalKeyStore,
     ConnectionState,
-    WAConnectionState
+    WAConnectionState,
+    fetchLatestBaileysVersion
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import pino from "pino";
@@ -16,7 +17,7 @@ export class WhatsAppService {
     private sock: any;
     private isReady = false;
     private usersCollection: Collection;
-    private logger = pino({ level: "silent" });
+    private logger = pino({ level: "warn" });
 
     constructor(usersCollection: Collection) {
         this.usersCollection = usersCollection;
@@ -24,35 +25,80 @@ export class WhatsAppService {
     }
 
     private async initializeBaileys() {
-        console.log("🚀 [WhatsApp] Initializing Baileys Service...");
+        console.log("🚀 [WhatsApp] Starting Baileys Service...");
 
+        // 1. Fetch Latest WA Version (Crucial for avoiding 405)
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        console.log(`[WhatsApp] Using version: ${version.join('.')} (Latest: ${isLatest})`);
+
+        // 2. Load Auth State
         const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
 
+        const hasCreds = !!(state.creds && state.creds.me);
+        console.log(`[WhatsApp] Auth State: ${hasCreds ? 'Logged In (' + (state.creds.me?.id || "Unknown") + ')' : 'No Session (QR required)'}`);
+
         this.sock = makeWASocket({
+            version,
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, this.logger),
             },
-            printQRInTerminal: false, // We'll handle it manually for better logging
             logger: this.logger,
-            browser: ["TrueCheck Server", "Chrome", "1.0.0"]
+            browser: ["TrueCheck", "Chrome", "11.0.0"],
+            syncFullHistory: false,
+            defaultQueryTimeoutMs: undefined,
+            connectTimeoutMs: 60000,
+            retryRequestDelayMs: 5000
         });
 
         this.sock.ev.on("creds.update", saveCreds);
 
-        this.sock.ev.on("connection.update", (update: Partial<ConnectionState>) => {
+        this.sock.ev.on("connection.update", async (update: Partial<ConnectionState>) => {
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
-                console.log("📲 Scan this QR to login WhatsApp (Baileys):");
+                console.log("\n==========================================");
+                console.log("📲 NEW WHATSAPP QR CODE GENERATED:");
+                console.log("👉 Scan this in WhatsApp -> Linked Devices");
+                console.log("==========================================\n");
                 qrcode.generate(qr, { small: true });
             }
 
             if (connection === "close") {
-                const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-                console.warn("⚠️ [WhatsApp] Connection closed. Reconnecting:", shouldReconnect);
+                const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+                console.warn(`⚠️ [WhatsApp] Connection closed (Status: ${statusCode}). Reconnecting: ${shouldReconnect}`);
                 this.isReady = false;
+
+                if (statusCode === 405 || statusCode === 401) {
+                    console.error(`🚨 [WhatsApp] CRITICAL ERROR ${statusCode}: Session corrupted or rejected.`);
+                    console.error("👉 ACTION: Clearing session and waiting for fresh state...");
+
+                    try {
+                        if (this.sock) {
+                            this.sock.ev.removeAllListeners("connection.update");
+                            this.sock.ev.removeAllListeners("creds.update");
+                            this.sock.ws?.close();
+                            this.sock = null;
+                        }
+
+                        const authPath = path.join(process.cwd(), "auth_info_baileys");
+                        if (fs.existsSync(authPath)) {
+                            // Windows File Lock Fix: Wait longer and force delete
+                            await new Promise(resolve => setTimeout(resolve, 8000));
+                            fs.rmSync(authPath, { recursive: true, force: true });
+                            console.log("✅ [WhatsApp] Session folder cleared.");
+                        }
+                    } catch (err: any) {
+                        console.error("[WhatsApp] Cleanup failed (folder may be locked):", err.message);
+                    }
+                }
+
                 if (shouldReconnect) {
+                    const delay = (statusCode === 405 || statusCode === 401) ? 20000 : 5000;
+                    console.log(`[WhatsApp] Re-initializing in ${delay / 1000}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                     this.initializeBaileys();
                 }
             } else if (connection === "open") {

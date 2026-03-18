@@ -10,6 +10,7 @@ import { ModeManager } from "../services/ModeManager";
 import { AttendancePoller } from "../services/AttendancePoller";
 import { OutsideUnitController } from "./OutsideUnitController";
 import { InsideUnitController } from "./InsideUnitController";
+import { SystemConfigService } from "../services/SystemConfigService";
 
 export class DeviceController {
     private connections: Map<string, WebSocket> = new Map();
@@ -27,6 +28,7 @@ export class DeviceController {
         private activeSessionService: ActiveSessionService,
         private modeManager: ModeManager,
         private attendancePoller: AttendancePoller,
+        private configService: SystemConfigService,
         private io: Server
     ) {
         // Initialize sub-controllers
@@ -60,6 +62,17 @@ export class DeviceController {
             // Trigger notifications and buzzer on inside units
             await this.insideController.triggerBreakWarning(room);
             await this.triggerBuzzer(room, message || "Break Re-verification Started");
+        };
+
+        // Bind ModeManager callbacks
+        this.modeManager.onModeChange = async (mode, reason) => {
+            console.log(`[DeviceController] ModeManager callback: ${mode} (${reason})`);
+            await this.broadcastToAllDevices({
+                type: "mode_update",
+                mode,
+                reason,
+                serverTime: Math.floor(Date.now() / 1000)
+            });
         };
     }
 
@@ -126,7 +139,13 @@ export class DeviceController {
             );
 
             await this.logActivity(deviceId, "AUTH_SUCCESS", `Device ${deviceId} authenticated`);
-            ws.send(JSON.stringify({ type: "authenticated", success: true }));
+            ws.send(JSON.stringify({
+                type: "authenticated",
+                success: true,
+                config: this.configService.getSettings(),
+                mode: this.modeManager.getCurrentMode(),
+                serverTime: Math.floor(Date.now() / 1000)
+            }));
         } else {
             ws.send(JSON.stringify({ type: "authenticated", success: false }));
         }
@@ -179,6 +198,18 @@ export class DeviceController {
                     duration: 3000,
                     message: message
                 }));
+            }
+        }
+    }
+
+    /**
+     * Broadcast a message to ALL connected devices regardless of room
+     */
+    public async broadcastToAllDevices(payload: any) {
+        console.log(`[DeviceController] 📢 Broadcasting ${payload.type} to all devices`);
+        for (const [deviceId, ws] of this.connections.entries()) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(payload));
             }
         }
     }

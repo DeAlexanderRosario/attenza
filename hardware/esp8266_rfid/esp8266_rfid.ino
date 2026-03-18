@@ -8,12 +8,17 @@
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 // --- YOUR SOLDERED PIN CONFIGURATION ---
 // We have to work with what you soldered.
 #define SS_PIN   D8  // GPIO 15 (The problematic pin)
-#define RST_PIN  D2  // GPIO 4
-#define BUZZER   D1  // GPIO 5
+#define RST_PIN  D1
+#define BUZZER   D0
+
+#define SDA_PIN  D3   // GPIO 4 G 
+#define SCL_PIN  D4   // GPIO 2 w
 
 // --- CONFIG ---
 char server_ip[40] = "192.168.1.5";
@@ -27,17 +32,17 @@ String serialBuffer = "";
 MFRC522 rfid(SS_PIN, RST_PIN); 
 WebSocketsClient webSocket;
 WiFiManager wifiManager;
+LiquidCrystal_I2C lcd(0x27, 16, 2); 
 
 // --- VARIABLES ---
-unsigned long lastScanTime = 0;
-const int scanCooldown = 2000;
 
 // --- UI STYLE ---
 const char* customUI = R"rawliteral(
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 :root{--p:#6366f1;--bg:#0a0518;--card:rgba(255,255,255,0.03)}
-html,body{margin:0;padding:0;background:radial-gradient(circle at 50% 0%,#1a1033 0%,var(--bg) 100%);font-family:'Segoe UI',Roboto,sans-serif;color:#fff;height:100%;display:flex;align-items:center;justify-content:center}
-.wrap{width:340px;padding:2.5rem;background:var(--card);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.1);border-radius:2rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);text-align:center}
+html,body{margin:0;padding:20px;background:radial-gradient(circle at 50% 0%,#1a1033 0%,var(--bg) 100%);font-family:'Segoe UI',Roboto,sans-serif;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+.wrap{width:100%;max-width:400px;padding:2.5rem 1.5rem;background:var(--card);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.1);border-radius:2rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);text-align:center;box-sizing:border-box}
 h1{font-size:2rem;margin:0 0 0.5rem;background:linear-gradient(135deg,#fff 0%,#a5b4fc 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-1px}
 h3{font-weight:400;font-size:0.9rem;opacity:0.6;margin-bottom:2rem;letter-spacing:1px;text-transform:uppercase}
 input{width:100%;padding:0.9rem 1.2rem;margin-bottom:1.2rem;border-radius:1rem;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#fff;font-size:1rem;box-sizing:border-box;transition:0.3s}
@@ -45,6 +50,7 @@ input:focus{outline:none;border-color:var(--p);box-shadow:0 0 0 4px rgba(99,102,
 button{width:100%;padding:1rem;border:none;border-radius:1rem;background:var(--p);color:#fff;font-weight:600;font-size:1rem;cursor:pointer;transition:0.3s;box-shadow:0 10px 15px -3px rgba(99,102,241,0.3)}
 button:hover{transform:translateY(-2px);box-shadow:0 20px 25px -5px rgba(99,102,241,0.4);filter:brightness(1.1)}
 ::placeholder{color:rgba(255,255,255,0.3)}
+@media(max-width:480px){.wrap{padding:2rem 1rem}.wrap h1{font-size:1.75rem}}
 </style>
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
@@ -58,7 +64,100 @@ document.addEventListener("DOMContentLoaded",()=>{
 </script>
 )rawliteral";
 
+// --- CUSTOM ICONS ---
+byte checkIcon[8] = { 0x0, 0x1, 0x3, 0x16, 0x1c, 0x8, 0x0, 0x0 };
+byte crossIcon[8] = { 0x0, 0x1b, 0xe, 0x4, 0xe, 0x1b, 0x0, 0x0 };
+byte clockIcon[8] = { 0x0, 0xe, 0x15, 0x17, 0x11, 0xe, 0x0, 0x0 };
+byte heart1[8] = { 0x0, 0xa, 0x1f, 0x1f, 0xe, 0x4, 0x0, 0x0 };
+byte heart2[8] = { 0x0, 0x0, 0xa, 0xe, 0x4, 0x0, 0x0, 0x0 };
+
+// --- VARIABLES ---
+unsigned long lastScanTime = 0;
+const int scanCooldown = 2000;
+unsigned long lastLCDInteractionMillis = 0;
+const int lcdTimeout = 10000; 
+unsigned long lastHeartbeatMillis = 0;
+bool heartState = false;
+
+// --- SYSTEM CONFIG ---
+struct SystemConfig {
+  int earlyAccessWindowMins = 30;
+  int postClassFreeAccessHours = 2;
+  int operatingStartHour = 7;
+  int operatingEndHour = 23;
+  int teacherGraceMins = 15;
+  int studentFirstSlotWindowMins = 30;
+  int studentRegularWindowMins = 5;
+  int reVerificationGraceMins = 3;
+  int breakWarningMins = 3;
+};
+
+SystemConfig sysConfig;
+unsigned long serverUnixTime = 0;
+unsigned long syncMillis = 0;
+
 // --- HELPER FUNCTIONS ---
+
+String centerText(String text) {
+  if (text.length() >= 16) return text.substring(0, 16);
+  int spaces = (16 - text.length()) / 2;
+  String out = "";
+  for (int i = 0; i < spaces; i++) out += " ";
+  out += text;
+  return out;
+}
+
+void updateDisplay(String line1, String line2 = "", int iconType = -1, bool flash = false) {
+  if (flash) {
+    lcd.noBacklight(); delay(50); lcd.backlight();
+  } else {
+    lcd.backlight();
+  }
+  
+  lastLCDInteractionMillis = millis();
+  lcd.clear();
+  
+  if (iconType >= 0) {
+    lcd.setCursor(0, 0);
+    lcd.write(byte(iconType));
+    lcd.setCursor(2, 0);
+    lcd.print(line1.substring(0, 14)); 
+  } else {
+    lcd.setCursor(0, 0);
+    lcd.print(centerText(line1));
+  }
+
+  if (line2.length() > 0) {
+    lcd.setCursor(0, 1);
+    lcd.print(centerText(line2));
+  }
+}
+
+bool isOperatingHours() {
+  if (syncMillis == 0) return true; // Assume open if not yet synced
+  
+  unsigned long currentUnixTime = serverUnixTime + (millis() - syncMillis) / 1000;
+  
+  // IST is UTC + 5:30 (19800 seconds)
+  unsigned long istTime = currentUnixTime + 19800;
+  int hour = (istTime / 3600) % 24;
+  
+  return (hour >= sysConfig.operatingStartHour && hour < sysConfig.operatingEndHour);
+}
+
+void handleModeDisplay(const char* mode) {
+  if (strcmp(mode, "IDLE") == 0) {
+    updateDisplay("Ready to Scan", "No Class In Session", 2);
+  } else if (strcmp(mode, "BREAK") == 0) {
+    updateDisplay("Break Period", "See You Later!", 2);
+  } else if (strcmp(mode, "SLOT_ACTIVE") == 0) {
+    updateDisplay("Class in Session", "Scan to Enter", 0);
+  } else if (strcmp(mode, "CLOSED") == 0) {
+    updateDisplay("System Closed", "Come Back Tomorrow", 1);
+  } else if (strcmp(mode, "EARLY_ACCESS_FIRST_SLOT") == 0) {
+    updateDisplay("Early Access", "Welcome!", 0);
+  }
+}
 
 void beep(int duration) {
   digitalWrite(BUZZER, HIGH);
@@ -157,10 +256,36 @@ void handleServerMessage(char* jsonString) {
   if (strcmp(type, "authenticated") == 0) {
     if (doc["success"]) {
       Serial.println(F("[WS] Auth SUCCESS"));
+      
+      // Sync Configuration
+      if (doc.containsKey("config")) {
+        JsonObject config = doc["config"];
+        sysConfig.earlyAccessWindowMins = config["earlyAccessWindowMins"] | 30;
+        sysConfig.postClassFreeAccessHours = config["postClassFreeAccessHours"] | 2;
+        sysConfig.operatingStartHour = config["operatingStartHour"] | 7;
+        sysConfig.operatingEndHour = config["operatingEndHour"] | 23;
+        sysConfig.teacherGraceMins = config["teacherGraceMins"] | 15;
+        sysConfig.studentFirstSlotWindowMins = config["studentFirstSlotWindowMins"] | 30;
+        sysConfig.studentRegularWindowMins = config["studentRegularWindowMins"] | 5;
+        sysConfig.reVerificationGraceMins = config["reVerificationGraceMins"] | 3;
+        sysConfig.breakWarningMins = config["breakWarningMins"] | 3;
+        Serial.println(F("[Config] Synced from server"));
+      }
+
+      if (doc.containsKey("serverTime")) {
+        serverUnixTime = doc["serverTime"];
+        syncMillis = millis();
+        Serial.print(F("[Time] Sync: ")); Serial.println(serverUnixTime);
+      }
+
+      const char* mode = doc["mode"] | "IDLE";
+      handleModeDisplay(mode);
+
       playPattern("double"); 
     } else {
       Serial.println(F("[WS] Auth DENIED"));
       playPattern("warning");
+      updateDisplay("Sorry, No Entry", "Contact Admin", 1);
     }
   } 
   else if (strcmp(type, "scan_result") == 0) {
@@ -169,10 +294,22 @@ void handleServerMessage(char* jsonString) {
     const char* pattern = doc["beepPattern"] | "";
     const char* role = doc["role"] | "";
     
+    const char* name = doc["user"]["name"] | "";
+    
     Serial.print(F("[Scan] ")); Serial.print(status);
     Serial.print(F(" - ")); Serial.print(msg);
+    if(strlen(name) > 0) { Serial.print(F(" for ")); Serial.print(name); }
     if(strlen(role) > 0) { Serial.print(F(" (")); Serial.print(role); Serial.print(F(")")); }
     Serial.println();
+
+    int icon = (status == 200) ? 0 : 1;
+    
+    // If name exists, show Name on Top, Msg on Bottom
+    if (strlen(name) > 0) {
+      updateDisplay(name, msg, icon);
+    } else {
+      updateDisplay(msg, role, icon);
+    }
 
     // 1. If explicit pattern provided, use it
     if (strlen(pattern) > 0) {
@@ -233,6 +370,20 @@ void setup() {
   pinMode(BUZZER, OUTPUT);
   delay(500); 
 
+  // Initialize I2C and LCD
+  Wire.begin(SDA_PIN, SCL_PIN);
+  lcd.init();
+  lcd.backlight();
+  
+  // Load custom icons
+  lcd.createChar(0, checkIcon);
+  lcd.createChar(1, crossIcon);
+  lcd.createChar(2, clockIcon);
+  lcd.createChar(3, heart1);
+  lcd.createChar(4, heart2);
+
+  updateDisplay("TrueCheck", "Welcome!");
+
   Serial.println(F("\n[Boot] TrueCheck Started"));
 
   if (LittleFS.begin()) {
@@ -258,6 +409,14 @@ void setup() {
     delay(500); Serial.print("."); retries++;
   }
   Serial.println();
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    updateDisplay("WiFi Connected", "Welcome!", 0);
+    delay(2000);
+    updateDisplay("Ready to scan", "Welcome!", 2);
+  } else {
+    updateDisplay("WiFi Timeout", "Please check", 1);
+  }
 
   // Initialize SPI
   SPI.begin();
@@ -311,6 +470,7 @@ void loop() {
 
           Serial.print(F("[RFID] ")); Serial.println(tag);
           beep(50);
+          updateDisplay("Hello!", "Checking tag...", 2);
 
           DynamicJsonDocument doc(256);
           doc["type"] = "rfid_scan";
@@ -329,4 +489,34 @@ void loop() {
   
   // CRITICAL: Yield to WiFi stack to prevent WDT Reset
   yield(); 
+
+  // Automatic Backlight Control & Operating Hours
+  static bool wasOffline = false;
+  bool currentlyOpen = isOperatingHours();
+  
+  if (!currentlyOpen) {
+    if (!wasOffline) {
+      updateDisplay("System Offline", "Opens @ " + String(sysConfig.operatingStartHour) + ":00", 2);
+      wasOffline = true;
+    }
+    if (millis() - lastLCDInteractionMillis > 5000) {
+      lcd.noBacklight();
+    }
+  } else {
+    if (wasOffline) {
+      updateDisplay("System Online", "Welcome!", 0);
+      wasOffline = false;
+    }
+    if (millis() - lastLCDInteractionMillis > lcdTimeout) {
+      lcd.noBacklight();
+    }
+  }
+
+  // Heartbeat indicator (top right)
+  if (currentlyOpen && millis() - lastHeartbeatMillis > 1000) {
+    lastHeartbeatMillis = millis();
+    heartState = !heartState;
+    lcd.setCursor(15, 0);
+    lcd.write(heartState ? byte(3) : byte(4));
+  }
 }

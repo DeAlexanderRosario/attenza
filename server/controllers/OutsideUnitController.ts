@@ -132,8 +132,8 @@ export class OutsideUnitController {
         ws.send(JSON.stringify({
             type: "scan_result",
             success: false,
-            message: "Classroom Closed",
-            beepPattern: "long", // Long failure beep
+            message: "Come Back Later",
+            beepPattern: "long",
             status: 403,
             user: userInfo
         }));
@@ -432,7 +432,7 @@ export class OutsideUnitController {
             ws.send(JSON.stringify({
                 type: "scan_result",
                 success: true,
-                message: newStatus === "IN" ? "Welcome" : "Goodbye",
+                message: newStatus === "IN" ? "Entry Granted" : "Exited Room",
                 beepPattern: "single",
                 role: "STUDENT",
                 status: 200,

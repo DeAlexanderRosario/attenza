@@ -17,7 +17,7 @@ export class SystemConfigService {
         earlyAccessWindowMins: 30,
         postClassFreeAccessHours: 2,
         operatingStartHour: 7,
-        operatingEndHour: 18,
+        operatingEndHour: 21,
         teacherGraceMins: 15,
         studentFirstSlotWindowMins: 30,
         studentRegularWindowMins: 5,
@@ -32,14 +32,40 @@ export class SystemConfigService {
      */
     public async initialize() {
         const dbSettings = await this.settingsCollection.findOne({ type: "global_config" });
+
         if (dbSettings) {
-            this.settings = { ...this.settings, ...dbSettings };
-            console.log("[SystemConfig] Settings loaded from DB");
-        } else {
-            console.log("[SystemConfig] No settings found in DB, using defaults");
+            // Merge defaults with DB settings to ensure all keys exist
+            this.settings = {
+                ...this.settings,
+                ...dbSettings
+            };
+
+            // Remove internal mongo _id if it leaked into our settings object
+            if ((this.settings as any)._id) delete (this.settings as any)._id;
+
+            // Perform a full sync back to DB to ensure all production defaults are present
+            console.log("[SystemConfig] Syncing production defaults to database...");
             await this.settingsCollection.updateOne(
                 { type: "global_config" },
-                { $set: { ...this.settings, type: "global_config", updatedAt: new Date() } },
+                {
+                    $set: {
+                        ...this.settings,
+                        updatedAt: new Date()
+                    }
+                }
+            );
+            console.log(`[SystemConfig] Ready. System closes at: ${this.settings.operatingEndHour}:00`);
+        } else {
+            console.log("[SystemConfig] No settings found in DB, initializing with defaults...");
+            await this.settingsCollection.updateOne(
+                { type: "global_config" },
+                {
+                    $set: {
+                        ...this.settings,
+                        type: "global_config",
+                        updatedAt: new Date()
+                    }
+                },
                 { upsert: true }
             );
         }

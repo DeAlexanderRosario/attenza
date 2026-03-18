@@ -113,6 +113,7 @@ async function startServer() {
             activeSessionService,
             modeManager, // ModeManager back to Controller
             attendancePoller,
+            configService,
             io
         );
 

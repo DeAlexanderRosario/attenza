@@ -11,6 +11,7 @@ export class ModeManager {
     private currentMode: SystemMode = SystemMode.CLOSED;
     private modeHistory: ModeTransitionEvent[] = [];
     private lastModeCheck: Date = new Date();
+    public onModeChange?: (mode: SystemMode, reason: string) => Promise<void>;
 
     constructor(
         private slotService: SlotService,
@@ -116,6 +117,11 @@ export class ModeManager {
                 reason
             });
         }
+
+        // Trigger external callback (e.g., to broadcast to hardware)
+        if (this.onModeChange) {
+            await this.onModeChange(newMode, reason);
+        }
     }
 
     /**
@@ -159,6 +165,7 @@ export class ModeManager {
      * Auto-check for mode transitions (called every minute)
      */
     public async checkModeTransitions(now: Date = new Date()): Promise<void> {
+        await this.configService.refresh(); // Sync with admin changes
         const currentHour = now.getHours();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 

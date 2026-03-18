@@ -84,7 +84,7 @@ export class InsideUnitController {
             ws.send(JSON.stringify({
                 type: "scan_result",
                 success: false,
-                message: "Classroom Closed",
+                message: "Come Back Later",
                 beepPattern: "long",
                 status: 403,
                 user: userInfo
