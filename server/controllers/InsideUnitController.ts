@@ -220,12 +220,7 @@ export class InsideUnitController {
             return;
         }
 
-        // ALLOW MOVEMENT TOGGLE DURING WAITING_FOR_TEACHER
-        if (currentSlot.status === AttendanceState.WAITING_FOR_TEACHER) {
-            console.log(`[InsideUnit] ✅ Student ${user.name} toggled movement while waiting for teacher`);
-            await this.handleMovementOnly(ws, user, room, now, deviceId, userInfo, currentSlot.slotId);
-            return;
-        }
+        // WAITING_FOR_TEACHER now falls through to early attendance verification
 
         // Get existing attendance record
         const existing = await this.attendanceService.getAttendanceRecord(user.id, currentSlot.slotId, dateStr);

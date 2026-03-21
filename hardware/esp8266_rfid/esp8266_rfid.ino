@@ -3,7 +3,6 @@
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
-#include <WiFiManager.h> 
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
@@ -14,9 +13,9 @@
 // --- YOUR SOLDERED PIN CONFIGURATION ---
 // We have to work with what you soldered.
 #define SS_PIN   D8  // GPIO 15 (The problematic pin)
-#define RST_PIN  D1
-#define BUZZER   D0
-#define CONFIG_BTN D2 // D7 is used by SPI! D2 is free.
+#define RST_PIN  D0
+#define BUZZER   D2
+#define CONFIG_BTN D1 
 
 #define SDA_PIN  D3   // GPIO 4 G 
 #define SCL_PIN  D4   // GPIO 2 w
@@ -26,13 +25,13 @@ char server_ip[40] = "192.168.1.5";
 char server_port[6] = "3001";
 char device_id[32] = "device_a205";
 
-bool shouldSaveConfig = false;
 String serialBuffer = ""; 
 
 // --- OBJECTS ---
 MFRC522 rfid(SS_PIN, RST_PIN); 
 WebSocketsClient webSocket;
-WiFiManager wifiManager;
+DNSServer dnsServer;
+ESP8266WebServer server(80);
 LiquidCrystal_I2C lcd(0x27, 16, 2); 
 
 // --- VARIABLES ---
@@ -44,162 +43,117 @@ const char* customUI = R"rawliteral(
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TrueCheck Setup</title>
-
 <style>
-:root{
-  --primary:#6366f1;
-  --bg:#0b1220;
-  --card:#111827;
-  --text:#e5e7eb;
-  --muted:#9ca3af;
-}
-
-*{
-  margin:0;
-  padding:0;
-  box-sizing:border-box;
-}
-
-body{
-  font-family: system-ui, -apple-system, sans-serif;
-  background: linear-gradient(180deg,#0b1220,#020617);
-  color:var(--text);
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  min-height:100vh;
-  padding:15px;
-}
-
-/* Card */
-.container{
-  width:100%;
-  max-width:380px;
-  background:var(--card);
-  padding:25px 20px;
-  border-radius:18px;
-  box-shadow:0 15px 40px rgba(0,0,0,0.6);
-  animation:fadeIn 0.5s ease;
-}
-
-/* Title */
-h1{
-  text-align:center;
-  font-size:24px;
-  margin-bottom:5px;
-}
-
-.sub{
-  text-align:center;
-  font-size:13px;
-  color:var(--muted);
-  margin-bottom:25px;
-}
-
-/* Inputs */
-.field{
-  position:relative;
-  margin-bottom:18px;
-}
-
-input{
-  width:100%;
-  padding:14px;
-  border-radius:12px;
-  border:1px solid #1f2937;
-  background:#020617;
-  color:#fff;
-  font-size:14px;
-}
-
-input:focus{
-  outline:none;
-  border-color:var(--primary);
-}
-
-/* Labels */
-label{
-  position:absolute;
-  top:-8px;
-  left:12px;
-  background:var(--card);
-  padding:0 6px;
-  font-size:11px;
-  color:var(--muted);
-}
-
-/* Button */
-button{
-  width:100%;
-  padding:14px;
-  border:none;
-  border-radius:12px;
-  background:var(--primary);
-  color:#fff;
-  font-size:15px;
-  font-weight:600;
-  cursor:pointer;
-  transition:0.2s;
-}
-
-button:hover{
-  background:#4f46e5;
-}
-
-button:active{
-  transform:scale(0.97);
-}
-
-/* Footer */
-.footer{
-  text-align:center;
-  font-size:11px;
-  color:var(--muted);
-  margin-top:15px;
-}
-
-/* Animation */
-@keyframes fadeIn{
-  from{opacity:0; transform:translateY(10px);}
-  to{opacity:1; transform:translateY(0);}
-}
-
-/* Mobile Optimization */
-@media(max-width:400px){
-  .container{
-    padding:20px 15px;
-  }
-  h1{
-    font-size:20px;
-  }
-}
+:root{--primary:#3b82f6;--bg:#0f172a;--card:#1e293b;--text:#f8fafc;--muted:#94a3b8;--border:#334155;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:15px;}
+.card{width:100%;max-width:400px;background:var(--card);padding:24px;border-radius:20px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);}
+h1{text-align:center;font-size:24px;margin-bottom:6px;}
+p.sub{text-align:center;font-size:14px;color:var(--muted);margin-bottom:20px;}
+.scan-btn{width:100%;padding:12px;background:rgba(59,130,246,0.1);color:var(--primary);border:1px solid var(--primary);border-radius:12px;font-weight:600;margin-bottom:15px;cursor:pointer;transition:0.2s;}
+.scan-btn:hover{background:rgba(59,130,246,0.2);}
+.wifi-list{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:12px;margin-bottom:20px;background:#0f172a;}
+.wifi-item{display:flex;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;}
+.wifi-item:last-child{border-bottom:none;}
+.wifi-item:hover,.wifi-item.active{background:rgba(59,130,246,0.15);}
+.wifi-name{font-weight:500;}
+.wifi-rssi{color:var(--muted);font-size:12px;}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;margin-left:4px;}
+input{width:100%;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:16px;}
+input:focus{outline:none;border-color:var(--primary);}
+.row{display:flex;gap:12px;}
+.col{flex:1;}
+.col-2{flex:2;}
+button.primary{width:100%;padding:16px;background:var(--primary);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:0.2s;}
+button.primary:hover{background:#2563eb;}
+button.primary:disabled{opacity:0.5;cursor:not-allowed;}
+.msg{text-align:center;margin-top:15px;font-size:14px;}
+.success{color:#22c55e;}
+.error{color:#ef4444;}
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
 </style>
 </head>
-
 <body>
-
-<div class="container">
-  <h1>TrueCheck</h1>
-  <div class="sub">Quick Device Setup</div>
-
-  <form action="/save" method="POST">
-    
-    <div class="field">
-      <label>WiFi Name</label>
-      <input type="text" name="ssid" required>
-    </div>
-
-    <div class="field">
-      <label>Password</label>
-      <input type="password" name="password" required>
-    </div>
-
-    <button type="submit">Connect Device</button>
-  </form>
-
-  <div class="footer">ESP8266 Setup Portal</div>
+<div class="card">
+<h1>Device Setup</h1>
+<p class="sub">Connect to local WiFi</p>
+<button class="scan-btn" id="scanBtn" onclick="scan()">Scan Networks</button>
+<div class="wifi-list" id="wifi-list">
+<div style="padding:15px;text-align:center;color:#94a3b8;font-size:13px;">Click Scan to view networks</div>
 </div>
-
+<form id="cfg">
+<label>WiFi SSID</label>
+<input type="text" id="ssid" required placeholder="Select or type SSID">
+<label>Password</label>
+<input type="password" id="pass" placeholder="Leave blank if open">
+<div class="row">
+<div class="col-2">
+<label>Server IP</label>
+<input type="text" id="ip" value="">
+</div>
+<div class="col">
+<label>Port</label>
+<input type="text" id="port" value="">
+</div>
+</div>
+<label>Device ID</label>
+<input type="text" id="dev" value="">
+<button type="submit" class="primary" id="saveBtn">Connect Target</button>
+</form>
+<div id="msg" class="msg"></div>
+</div>
+<script>
+fetch('/config').then(r=>r.json()).then(d=>{
+document.getElementById('ip').value=d.ip||'192.168.1.5';
+document.getElementById('port').value=d.port||'3001';
+document.getElementById('dev').value=d.dev||'device_a205';
+}).catch(e=>console.log(e));
+async function scan(){
+let btn=document.getElementById('scanBtn');
+let list=document.getElementById('wifi-list');
+btn.innerText='Scanning...';
+btn.disabled=true;
+try{
+let r=await fetch('/scan');
+let n=await r.json();
+btn.innerText='Scan Networks';
+btn.disabled=false;
+list.innerHTML='';
+if(n.length==0) list.innerHTML='<div style="padding:15px;text-align:center;color:#94a3b8">No networks found</div>';
+n.forEach(w=>{
+let d=document.createElement('div');
+d.className='wifi-item';
+d.innerHTML=`<span class="wifi-name">${w.ssid}</span><span class="wifi-rssi">${w.rssi} dBm</span>`;
+d.onclick=()=>{
+document.querySelectorAll('.wifi-item').forEach(e=>e.classList.remove('active'));
+d.classList.add('active');
+document.getElementById('ssid').value=w.ssid;
+document.getElementById('pass').focus();
+};
+list.appendChild(d);
+});
+}catch(e){
+btn.innerText='Scan Failed. Retry?';
+btn.disabled=false;
+}
+}
+document.getElementById('cfg').onsubmit=async(e)=>{
+e.preventDefault();
+let b=document.getElementById('saveBtn');
+let m=document.getElementById('msg');
+b.disabled=true; b.innerText='Connecting...'; m.className='msg'; m.innerText='';
+let p={ssid:document.getElementById('ssid').value,pass:document.getElementById('pass').value,ip:document.getElementById('ip').value,port:document.getElementById('port').value,dev:document.getElementById('dev').value};
+try{
+let r=await fetch('/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+let d=await r.json();
+if(d.status=='success'){m.className='msg success';m.innerText='Connected! Rebooting...';b.innerText='Success';}
+else{m.className='msg error';m.innerText='Failed: '+d.reason;b.disabled=false;b.innerText='Try Again';}
+}catch(err){m.className='msg error';m.innerText='Error connecting.';b.disabled=false;b.innerText='Try Again';}
+};
+scan();
+</script>
 </body>
 </html>
 )rawliteral";
@@ -218,6 +172,7 @@ unsigned long lastLCDInteractionMillis = 0;
 const int lcdTimeout = 10000; 
 unsigned long lastHeartbeatMillis = 0;
 bool heartState = false;
+String lastScannedTag = "";
 
 // --- SYSTEM CONFIG ---
 struct SystemConfig {
@@ -305,11 +260,6 @@ void beep(int duration) {
   digitalWrite(BUZZER, LOW);
 }
 
-void saveConfigCallback () {
-  Serial.println(F("[Config] Saving..."));
-  shouldSaveConfig = true;
-}
-
 void saveConfigToFS() {
   Serial.println(F("[FS] Writing config..."));
   DynamicJsonDocument json(1024);
@@ -336,34 +286,82 @@ void startConfigPortal() {
   
   beep(100); beep(100);
 
-  WiFiManagerParameter custom_server_ip("server", "Server IP", server_ip, 40);
-  WiFiManagerParameter custom_server_port("port", "Port", server_port, 6);
-  WiFiManagerParameter custom_device_id("device", "Device ID", device_id, 32);
-
-  wifiManager.resetSettings(); 
-  wifiManager.setSaveConfigCallback(saveConfigCallback);
-  wifiManager.setCustomHeadElement(customUI);
-  wifiManager.addParameter(&custom_server_ip);
-  wifiManager.addParameter(&custom_server_port);
-  wifiManager.addParameter(&custom_device_id);
-  wifiManager.setConfigPortalTimeout(180); 
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP("TrueCheck_Config_Mode");
+  updateDisplay("Setup IP:", WiFi.softAPIP().toString(), 2);
   
-  if (!wifiManager.startConfigPortal("TrueCheck_Config_Mode")) {
-    Serial.println(F("[WiFi] Timeout. Restarting..."));
-    delay(1000);
-    ESP.restart();
-  } else {
-    strcpy(server_ip, custom_server_ip.getValue());
-    strcpy(server_port, custom_server_port.getValue());
-    strcpy(device_id, custom_device_id.getValue());
+  dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+  dnsServer.start(53, "*", WiFi.softAPIP());
 
-    if (shouldSaveConfig) saveConfigToFS();
+  server.on("/", HTTP_GET, [](){
+    server.send(200, "text/html", customUI);
+  });
+  
+  server.on("/config", HTTP_GET, [](){
+    String json = "{\"ip\":\"" + String(server_ip) + "\",\"port\":\"" + String(server_port) + "\",\"dev\":\"" + String(device_id) + "\"}";
+    server.send(200, "application/json", json);
+  });
+  
+  server.on("/scan", HTTP_GET, [](){
+    int n = WiFi.scanNetworks();
+    String json = "[";
+    for(int i = 0; i < n; ++i) {
+      if(i) json += ",";
+      json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
+    }
+    json += "]";
+    server.send(200, "application/json", json);
+  });
+  
+  server.on("/connect", HTTP_POST, [](){
+    if(!server.hasArg("plain")) {
+      server.send(400, "application/json", "{\"status\":\"error\", \"reason\":\"No payload\"}");
+      return;
+    }
+    DynamicJsonDocument doc(512);
+    DeserializationError err = deserializeJson(doc, server.arg("plain"));
+    if (err) {
+      server.send(400, "application/json", "{\"status\":\"error\", \"reason\":\"Invalid JSON\"}");
+      return;
+    }
     
-    Serial.println(F("[Sys] Rebooting..."));
-    beep(500); 
+    String ssid = doc["ssid"].as<String>();
+    String pass = doc["pass"].as<String>();
+    strcpy(server_ip, doc["ip"] | server_ip);
+    strcpy(server_port, doc["port"] | server_port);
+    strcpy(device_id, doc["dev"] | device_id);
+
+    saveConfigToFS();
+
+    // Respond to the client BEFORE attempting connection to avoid hanging the browser
+    server.send(200, "application/json", "{\"status\":\"success\"}");
+    delay(500);
+
+    WiFi.disconnect();
+    WiFi.persistent(true);
+    WiFi.begin(ssid.c_str(), pass.c_str());
+    
+    // Give the WiFi chip 500ms to save credentials to flash, then reboot
     delay(500);
     ESP.restart();
+  });
+
+  server.onNotFound([](){
+    server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString(), true);
+    server.send(302, "text/plain", "");
+  });
+
+  server.begin();
+
+  unsigned long startWait = millis();
+  while(millis() - startWait < 180000) { // 3 mins timeout
+    dnsServer.processNextRequest();
+    server.handleClient();
+    yield();
   }
+  
+  Serial.println(F("[Sys] Config portal timeout. Rebooting..."));
+  ESP.restart();
 }
 
 // --- BEER PATTERNS ---
@@ -445,7 +443,9 @@ void handleServerMessage(char* jsonString) {
     int icon = (status == 200) ? 0 : 1;
     
     // If name exists, show Name on Top, Msg on Bottom
-    if (strlen(name) > 0) {
+    if (status == 404) {
+      updateDisplay("Unknown Card", lastScannedTag, 1);
+    } else if (strlen(name) > 0) {
       updateDisplay(name, msg, icon);
     } else {
       updateDisplay(msg, role, icon);
@@ -495,7 +495,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 // --- SETUP ---
 void setup() {
-  WiFi.persistent(false); 
+  WiFi.persistent(true); 
   Serial.begin(115200);
   
   // -----------------------------------------------------------
@@ -617,6 +617,7 @@ void loop() {
             tag += String(rfid.uid.uidByte[i], HEX);
           }
           tag.toUpperCase();
+          lastScannedTag = tag;
 
           Serial.print(F("[RFID] ")); Serial.println(tag);
           beep(50);

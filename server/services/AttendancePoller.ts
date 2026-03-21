@@ -175,7 +175,7 @@ export class AttendancePoller {
             try {
                 await this.whatsAppService.sendDirectMessage(
                     student.phoneNumber,
-                    `⚠️ *TrueCheck Attendance Warning* ⚠️\n` +
+                    `*TrueCheck Attendance Warning* \n` +
                     `━━━━━━━━━━━━━━━━━━━━\n` +
                     `📢 *TEACHER ARRIVAL DETECTED*\n\n` +
                     `📍 *Subject:* ${subjectName}\n` +
@@ -209,8 +209,8 @@ export class AttendancePoller {
             date
         }).toArray();
 
-        const present = records.filter((r: any) => r.status === "present" && r.source === "teacher_arrival").length;
-        const late = records.filter((r: any) => r.status === "late").length;
+        const present = records.filter((r: any) => r.status === "present" && r.isVerified === true).length;
+        const late = records.filter((r: any) => r.status === "late" && r.isVerified === true).length;
         const total = records.length;
         const absent = total - present - late;
 

@@ -66,9 +66,10 @@ export class AttendanceService {
     }
 
     /**
-     * Mark late entry (student arriving after entry window)
+     * Mark entry (creates unverified attendance)
+     * Handles both early entries and late entries
      */
-    public async markLateEntry(
+    public async markEntryUnverified(
         student: { id: string; name: string },
         slot: ActiveSlot,
         timestamp: Date,
@@ -80,8 +81,10 @@ export class AttendanceService {
         // Calculate points (Atomic logic)
         const graceStart = slot.teacherArrivedAt || slot.startTime;
         const diffMins = (timestamp.getTime() - graceStart.getTime()) / 60000;
-        const status = diffMins > 5 ? "late" : "present";
-        const points = diffMins > 5 ? 5 : 10;
+        const isLate = slot.teacherArrivedAt && diffMins > 5;
+        const status = isLate ? "late" : "present";
+        const points = isLate ? 5 : 10;
+        const source = slot.teacherArrivedAt ? "late_entry" : "early_entry";
 
         try {
             const result = await this.attendanceCollection.updateOne(
@@ -101,7 +104,7 @@ export class AttendanceService {
                         subjectName: slot.subjectName,
                         teacherId: slot.teacherId,
                         organizationId: slot.organizationId,
-                        source: "late_entry",
+                        source: source as AttendanceSource,
                         isVerified: false,
                         inRoomStatus: "IN",
                         lastMovementAt: timestamp

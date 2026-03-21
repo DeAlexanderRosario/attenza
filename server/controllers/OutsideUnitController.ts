@@ -373,7 +373,7 @@ export class OutsideUnitController {
      */
     private async handleStudentScan(ws: WebSocket, user: any, room: string, now: Date, rfidTag: string, deviceId: string, userInfo: any) {
         // Get current slot
-        const currentSlot = this.stateManager.getSlotState(room);
+        let currentSlot = this.stateManager.getSlotState(room);
 
         if (!currentSlot) {
             // Check if there is a scheduled class for this student right now
@@ -391,7 +391,7 @@ export class OutsideUnitController {
                 endTime.setHours(endH, endM, 0, 0);
 
                 this.stateManager.initializeSlot(
-                    scheduledSlot.id || scheduledSlot.classSlotId,
+                    String(scheduledSlot.id || scheduledSlot.classSlotId),
                     room,
                     startTime,
                     endTime,
@@ -404,16 +404,22 @@ export class OutsideUnitController {
                     AttendanceState.WAITING_FOR_TEACHER
                 );
 
-                // Now toggle movement for WAITING_FOR_TEACHER
+                // Fetch newly initialized slot so it falls through to attendance creation
+                currentSlot = this.stateManager.getSlotState(room);
+                if (!currentSlot) return; // safety check
+            } else {
+                // FINAL FALLBACK: Always allow movement during operating hours (BREAK, IDLE, or missing timetable)
                 const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
                 const newStatus = currentStatus === "IN" ? "OUT" : "IN";
 
-                await this.stateManager.updateInRoomStatus(user.id, room, newStatus, scheduledSlot.id || scheduledSlot.classSlotId);
+                console.log(`[OutsideUnit] ✅ No active slot found, but allowing movement for ${user.name} (${newStatus})`);
+                await this.stateManager.updateInRoomStatus(user.id, room, newStatus);
 
                 ws.send(JSON.stringify({
                     type: "scan_result",
                     success: true,
-                    message: newStatus === "IN" ? "Entered Room (Waiting for Teacher)" : "Left Room",
+                    message: newStatus === "IN" ? "Entry Granted" : "Exited Room",
+                    beepPattern: "single",
                     role: "STUDENT",
                     status: 200,
                     user: userInfo,
@@ -421,26 +427,9 @@ export class OutsideUnitController {
                 }));
                 return;
             }
-
-            // FINAL FALLBACK: Always allow movement during operating hours (BREAK, IDLE, or missing timetable)
-            const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
-            const newStatus = currentStatus === "IN" ? "OUT" : "IN";
-
-            console.log(`[OutsideUnit] ✅ No active slot found, but allowing movement for ${user.name} (${newStatus})`);
-            await this.stateManager.updateInRoomStatus(user.id, room, newStatus);
-
-            ws.send(JSON.stringify({
-                type: "scan_result",
-                success: true,
-                message: newStatus === "IN" ? "Entry Granted" : "Exited Room",
-                beepPattern: "single",
-                role: "STUDENT",
-                status: 200,
-                user: userInfo,
-                movement: newStatus
-            }));
-            return;
         }
+
+        if (!currentSlot) return; // final safety check for TS
 
         // Check if student is in the class
         if (user.classId !== currentSlot.classId) {
@@ -456,30 +445,9 @@ export class OutsideUnitController {
             return;
         }
 
-        // ALLOW TOGGLE DURING WAITING_FOR_TEACHER OR SLOT_ACTIVE
-        if (currentSlot.status === AttendanceState.WAITING_FOR_TEACHER) {
-            const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
-            const newStatus = currentStatus === "IN" ? "OUT" : "IN";
+        // Remove movement toggle for WAITING_FOR_TEACHER, allow them to create unverified attendance
 
-            console.log(`[OutsideUnit] ✅ Student ${user.name} ${newStatus === "IN" ? "entered" : "left"} while waiting for teacher`);
-
-            // Update status
-            await this.stateManager.updateInRoomStatus(user.id, room, newStatus, currentSlot.slotId);
-
-            ws.send(JSON.stringify({
-                type: "scan_result",
-                success: true,
-                message: newStatus === "IN" ? "Entered" : "Left",
-                beepPattern: "single",
-                role: "STUDENT",
-                status: 200,
-                user: userInfo,
-                movement: newStatus
-            }));
-            return;
-        }
-
-        if (currentSlot.status !== AttendanceState.SLOT_ACTIVE) {
+        if (currentSlot.status !== AttendanceState.SLOT_ACTIVE && currentSlot.status !== AttendanceState.WAITING_FOR_TEACHER) {
             console.log(`[OutsideUnit] ❌ Slot in state ${currentSlot.status}, rejecting ${user.name}`);
             ws.send(JSON.stringify({
                 type: "scan_result",
@@ -516,8 +484,8 @@ export class OutsideUnitController {
             return;
         }
 
-        // Mark late entry
-        const result = await this.attendanceService.markLateEntry(
+        // Mark entry (unverified)
+        const result = await this.attendanceService.markEntryUnverified(
             { id: user.id, name: user.name },
             currentSlot,
             now,
@@ -555,6 +523,28 @@ export class OutsideUnitController {
                 status: result.points === 10 ? 'success' : 'warning',
                 points: result.points
             });
+
+            // Set 2-minute WhatsApp reminder to scan inside
+            setTimeout(async () => {
+                try {
+                    const checkDateStr = new Date().toLocaleDateString('en-CA');
+                    const checkRecord = await this.attendanceService.getAttendanceRecord(user.id, currentSlot!.slotId, checkDateStr);
+                    
+                    if (checkRecord && !checkRecord.isVerified) {
+                        console.log(`[OutsideUnit] ⏰ Sending WhatsApp reminder to ${user.name} for inside scan`);
+                        await this.whatsAppService.sendUserMessage(
+                            user.id,
+                            `🚨 *Attendance Reminder*\n\n` +
+                            `Hi ${user.name},\n` +
+                            `You scanned the Outside unit but haven't scanned the Inside unit yet!\n\n` +
+                            `Please scan the *Inside Unit* immediately to confirm your attendance. If you don't scan, you will be marked absent.\n` +
+                            `━━━━━━━━━━━━━━━━━━━━`
+                        );
+                    }
+                } catch (err) {
+                    console.error("[OutsideUnit] Error checking reminder:", err);
+                }
+            }, 120000);
         } else {
             ws.send(JSON.stringify({
                 type: "scan_result",
