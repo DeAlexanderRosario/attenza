@@ -121,11 +121,24 @@ export class InsideUnitController {
      */
     private async handleMovementOnly(ws: WebSocket, user: any, room: string, now: Date, deviceId: string, userInfo: any, slotId?: string) {
         const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
-        const newStatus = currentStatus === "IN" ? "OUT" : "IN";
+        
+        if (currentStatus !== "IN") {
+            ws.send(JSON.stringify({
+                type: "scan_result",
+                success: false,
+                message: "Please use Outside Unit to Enter",
+                role: "STUDENT",
+                status: 403,
+                user: userInfo
+            }));
+            return;
+        }
+
+        const newStatus = "OUT";
 
         await this.stateManager.updateInRoomStatus(user.id, room, newStatus, slotId);
 
-        await this.logActivity(deviceId, "movement", `${user.name} ${newStatus === "OUT" ? "left" : "entered"}`, {
+        await this.logActivity(deviceId, "movement", `${user.name} left`, {
             userId: user.id,
             status: newStatus
         });
@@ -133,8 +146,8 @@ export class InsideUnitController {
         ws.send(JSON.stringify({
             type: "scan_result",
             success: true,
-            message: newStatus === "OUT" ? "Going Out" : "Welcome Back",
-            beepPattern: newStatus === "OUT" ? "long" : "single",
+            message: "Going Out",
+            beepPattern: "long",
             role: "STUDENT",
             status: 200,
             user: userInfo,
@@ -280,11 +293,24 @@ export class InsideUnitController {
             return;
         }
 
-        // Already verified - toggle movement
+        // Already verified - check movement
+        const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
+        if (currentStatus !== "IN") {
+            ws.send(JSON.stringify({
+                type: "scan_result",
+                success: false,
+                message: "Please use Outside Unit to Enter",
+                role: "STUDENT",
+                status: 403,
+                user: userInfo
+            }));
+            return;
+        }
+
         const result = await this.attendanceService.toggleMovement(user.id, currentSlot.slotId, room, now);
 
         if (result.success) {
-            await this.logActivity(deviceId, "movement", `${user.name} ${result.newStatus === "OUT" ? "left" : "returned"}`, {
+            await this.logActivity(deviceId, "movement", `${user.name} left`, {
                 userId: user.id,
                 status: result.newStatus
             });
@@ -304,7 +330,7 @@ export class InsideUnitController {
                 user: user.name,
                 action: result.message,
                 time: now.toLocaleTimeString(),
-                status: result.newStatus === "OUT" ? 'warning' : 'success',
+                status: 'warning',
                 movement: result.newStatus
             });
         } else {

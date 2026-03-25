@@ -42,8 +42,8 @@ export class AttendanceService {
                             teacherId: slot.teacherId,
                             organizationId: slot.organizationId,
                             source,
-                            isVerified: true,
-                            verifiedAt: timestamp,
+                            isVerified: source === "auto_re_verification",
+                            verifiedAt: source === "auto_re_verification" ? timestamp : null,
                             inRoomStatus: "IN",
                             lastMovementAt: timestamp
                         }

@@ -189,9 +189,9 @@ export class WhatsAppService {
         const message =
             `⏳ *TrueCheck Time Alert* ⏳\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `☕ *BREAK ENDING SOON* ☕\n\n` +
+            `🎓 *NEXT CLASS STARTING SOON* 🎓\n\n` +
             `🏃‍♂️ Your next session starts in *${minsLeft} minutes*.\n\n` +
-            `📍 *Action:* Please start moving towards your classroom.\n` +
+            `📍 *Action:* Since you are already in the classroom, please be ready to scan your ID on the *Inside Unit* as soon as the teacher arrives to mark your attendance!\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
             `_Stay punctual, stay ahead!_ 🚀`;
 

@@ -110,20 +110,14 @@ export class OutsideUnitController {
     private async handleClosed(ws: WebSocket, user: any, userInfo: any, room: string) {
         const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
 
-        // If they are IN, allow them to go OUT (safety/emergency exit)
         if (currentStatus === "IN") {
-            console.log(`[OutsideUnit] Emergency Exit: ${user.name} leaving closed classroom`);
-            await this.stateManager.updateInRoomStatus(user.id, room, "OUT");
-
             ws.send(JSON.stringify({
                 type: "scan_result",
-                success: true,
-                message: "Emergency Exit",
-                beepPattern: "single", // Standard exit beep
-                role: user.role.toUpperCase(),
-                status: 200,
-                user: userInfo,
-                movement: "OUT"
+                success: false,
+                message: "Please use Inside Unit to Exit",
+                beepPattern: "long",
+                status: 403,
+                user: userInfo
             }));
             return;
         }
@@ -144,7 +138,20 @@ export class OutsideUnitController {
      */
     private async handleEarlyAccess(ws: WebSocket, user: any, room: string, now: Date, deviceId: string, userInfo: any) {
         const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
-        const newStatus = currentStatus === "IN" ? "OUT" : "IN";
+        
+        if (currentStatus === "IN") {
+            ws.send(JSON.stringify({
+                type: "scan_result",
+                success: false,
+                message: "Please use Inside Unit to Exit",
+                beepPattern: "long",
+                status: 403,
+                user: userInfo
+            }));
+            return;
+        }
+
+        const newStatus = "IN";
 
         console.log(`[OutsideUnit] ✅ Early Access: ${user.name} (${newStatus})`);
 
@@ -152,13 +159,13 @@ export class OutsideUnitController {
         await this.stateManager.updateInRoomStatus(user.id, room, newStatus);
 
         // Log activity
-        await this.logActivity(deviceId, "early_access", `${user.name} ${newStatus === "IN" ? "entered" : "left"} during early access`, { userId: user.id, status: newStatus });
+        await this.logActivity(deviceId, "early_access", `${user.name} entered during early access`, { userId: user.id, status: newStatus });
 
         // Send response with SINGLE BEEP
         ws.send(JSON.stringify({
             type: "scan_result",
             success: true,
-            message: newStatus === "IN" ? "Entry Granted" : "Exited Room",
+            message: "Entry Granted",
             beepPattern: "single",
             status: 200,
             user: userInfo,
@@ -172,7 +179,20 @@ export class OutsideUnitController {
      */
     private async handlePostClassFreeAccess(ws: WebSocket, user: any, room: string, now: Date, deviceId: string, userInfo: any) {
         const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
-        const newStatus = currentStatus === "IN" ? "OUT" : "IN";
+        
+        if (currentStatus === "IN") {
+            ws.send(JSON.stringify({
+                type: "scan_result",
+                success: false,
+                message: "Please use Inside Unit to Exit",
+                beepPattern: "long",
+                status: 403,
+                user: userInfo
+            }));
+            return;
+        }
+
+        const newStatus = "IN";
 
         console.log(`[OutsideUnit] ✅ Post-Class Free Access: ${user.name} (${newStatus})`);
 
@@ -180,13 +200,13 @@ export class OutsideUnitController {
         await this.stateManager.updateInRoomStatus(user.id, room, newStatus);
 
         // Log activity
-        await this.logActivity(deviceId, "free_access", `${user.name} ${newStatus === "IN" ? "entered" : "left"} during free access`, { userId: user.id, status: newStatus });
+        await this.logActivity(deviceId, "free_access", `${user.name} entered during free access`, { userId: user.id, status: newStatus });
 
         // Send response
         ws.send(JSON.stringify({
             type: "scan_result",
             success: true,
-            message: newStatus === "IN" ? "Entry Granted" : "Exited Room",
+            message: "Entry Granted",
             beepPattern: "single",
             status: 200,
             user: userInfo,
@@ -410,15 +430,28 @@ export class OutsideUnitController {
             } else {
                 // FINAL FALLBACK: Always allow movement during operating hours (BREAK, IDLE, or missing timetable)
                 const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
-                const newStatus = currentStatus === "IN" ? "OUT" : "IN";
+                
+                if (currentStatus === "IN") {
+                    ws.send(JSON.stringify({
+                        type: "scan_result",
+                        success: false,
+                        message: "Please use Inside Unit to Exit",
+                        role: "STUDENT",
+                        status: 403,
+                        user: userInfo
+                    }));
+                    return;
+                }
 
-                console.log(`[OutsideUnit] ✅ No active slot found, but allowing movement for ${user.name} (${newStatus})`);
+                const newStatus = "IN";
+
+                console.log(`[OutsideUnit] ✅ No active slot found, but allowing entry for ${user.name} (${newStatus})`);
                 await this.stateManager.updateInRoomStatus(user.id, room, newStatus);
 
                 ws.send(JSON.stringify({
                     type: "scan_result",
                     success: true,
-                    message: newStatus === "IN" ? "Entry Granted" : "Exited Room",
+                    message: "Entry Granted",
                     beepPattern: "single",
                     role: "STUDENT",
                     status: 200,
@@ -466,16 +499,28 @@ export class OutsideUnitController {
         const existing = await this.attendanceService.getAttendanceRecord(user.id, currentSlot.slotId, dateStr);
 
         if (existing) {
-            // Already has attendance - toggle in-room status
+            // Already has attendance - check in-room status
             const currentStatus = await this.stateManager.getInRoomStatus(user.id, room);
-            const newStatus = currentStatus === "IN" ? "OUT" : "IN";
+            
+            if (currentStatus === "IN") {
+                ws.send(JSON.stringify({
+                    type: "scan_result",
+                    success: false,
+                    message: "Please use Inside Unit to Exit",
+                    role: "STUDENT",
+                    status: 403,
+                    user: userInfo
+                }));
+                return;
+            }
 
+            const newStatus = "IN";
             await this.stateManager.updateInRoomStatus(user.id, room, newStatus, currentSlot.slotId);
 
             ws.send(JSON.stringify({
                 type: "scan_result",
                 success: true,
-                message: newStatus === "IN" ? "Welcome Back" : "Going Out",
+                message: "Welcome Back",
                 role: "STUDENT",
                 status: 200,
                 user: userInfo,
