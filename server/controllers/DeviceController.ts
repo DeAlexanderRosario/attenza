@@ -164,6 +164,23 @@ export class DeviceController {
                 mode: this.modeManager.getCurrentMode(),
                 serverTime: Math.floor(Date.now() / 1000)
             }));
+
+            // Inside unit hardware doesn't auto-clear the Authenticated screen.
+            // Send a silent UI update 2 seconds later to say "Ready to Scan"
+            if (device.placement !== "outside" && device.placement !== "Outside") {
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: "scan_result",
+                            success: true,
+                            message: "Inside Unit",
+                            user: { name: "Ready to Scan" },
+                            status: 200,
+                            beepPattern: "silent" // Prevent the device from beeping
+                        }));
+                    }
+                }, 2000);
+            }
         } else {
             ws.send(JSON.stringify({ type: "authenticated", success: false }));
         }

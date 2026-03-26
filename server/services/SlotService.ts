@@ -46,8 +46,8 @@ export class SlotService {
             id: activeSlot.id,
             startTime: activeSlot.startTime,
             endTime: activeSlot.endTime,
-            type: activeSlot.type.toLowerCase() as "class" | "break",
-            label: `Slot ${activeSlot.slotNumber}`
+            type: (activeSlot.type ? activeSlot.type.toLowerCase() : "class") as "class" | "break",
+            label: activeSlot.label || `Slot ${activeSlot.slotNumber || activeSlot.id}`
         };
     }
 
@@ -369,8 +369,8 @@ export class SlotService {
             id: s.id,
             startTime: s.startTime,
             endTime: s.endTime,
-            type: s.type.toLowerCase() as "class" | "break",
-            label: s.label || `Slot ${s.slotNumber}`,
+            type: (s.type ? s.type.toLowerCase() : "class") as "class" | "break",
+            label: s.label || `Slot ${s.slotNumber || s.id}`,
             slotNumber: s.slotNumber,
             isActive: s.isActive
         }));
