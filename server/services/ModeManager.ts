@@ -173,9 +173,27 @@ export class ModeManager {
 
         const settings = this.configService.getSettings();
 
-        // 1. Check if outside operating hours
-        if (currentHour < settings.operatingStartHour || currentHour >= settings.operatingEndHour) {
-            console.log(`[ModeManager] DEBUG: Outside operating hours (${currentHour})`);
+        // 2. Get slot information
+        const firstSlot = await this.slotService.getFirstSlotOfDay();
+        const lastSlot = await this.slotService.getLastSlotOfDay();
+        const activeSlot = await this.slotService.getActivePeriod(now);
+
+        // Check if we are in the early access window of the first slot
+        let isWithinEarlyAccess = false;
+        if (firstSlot) {
+            const [startH, startM] = firstSlot.startTime.split(':').map(Number);
+            const slotStartMinutes = startH * 60 + startM;
+            const earlyAccessStart = slotStartMinutes - settings.earlyAccessWindowMins;
+            if (currentMinutes >= earlyAccessStart && currentMinutes < slotStartMinutes) {
+                isWithinEarlyAccess = true;
+            }
+        }
+
+        // 1. Check if outside operating hours (BUT allow Early Access)
+        const isOutsideHours = (currentHour < settings.operatingStartHour || currentHour >= settings.operatingEndHour);
+        
+        if (isOutsideHours && !isWithinEarlyAccess) {
+            console.log(`[ModeManager] DEBUG: Outside operating hours (${currentHour}) and no early access.`);
             if (this.currentMode !== SystemMode.CLOSED) {
                 await this.transitionToMode(SystemMode.CLOSED, "Outside operating hours");
 
@@ -187,12 +205,6 @@ export class ModeManager {
             }
             return;
         }
-
-        // 2. Get slot information
-        console.log(`[ModeManager] DEBUG: Fetching slots...`);
-        const firstSlot = await this.slotService.getFirstSlotOfDay();
-        const lastSlot = await this.slotService.getLastSlotOfDay();
-        const activeSlot = await this.slotService.getActivePeriod(now);
 
         // SYNC StateManager if there is an active slot (especially for breaks)
         if (activeSlot) {

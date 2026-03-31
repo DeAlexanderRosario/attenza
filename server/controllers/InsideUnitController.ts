@@ -225,7 +225,12 @@ export class InsideUnitController {
             return;
         }
 
-        const dateStr = now.toLocaleDateString('en-CA');
+        // Allow verification during ACTIVE and WAITING_FOR_TEACHER states
+        const allowedVerificationStates = [
+            AttendanceState.SLOT_ACTIVE,
+            AttendanceState.WAITING_FOR_TEACHER,
+            AttendanceState.RE_VERIFICATION
+        ];
 
         // Check for break re-verification window
         if (currentSlot.status === AttendanceState.BREAK) {
@@ -233,18 +238,25 @@ export class InsideUnitController {
             return;
         }
 
-        // WAITING_FOR_TEACHER now falls through to early attendance verification
+        // Check if slot status allows attendance verification
+        if (!allowedVerificationStates.includes(currentSlot.status)) {
+            console.log(`[InsideUnit] ❌ Slot in state ${currentSlot.status} does not allow verification for ${user.name}`);
+            // Fallback to movement tracking only
+            await this.handleMovementOnly(ws, user, room, now, deviceId, userInfo);
+            return;
+        }
 
         // Get existing attendance record
+        const dateStr = now.toLocaleDateString('en-CA');
         const existing = await this.attendanceService.getAttendanceRecord(user.id, currentSlot.slotId, dateStr);
 
         if (!existing) {
             // No attendance record - must scan outside first
-            console.log(`[InsideUnit] ❌ ${user.name} has no attendance record`);
+            console.log(`[InsideUnit] ❌ ${user.name} has no attendance record for slot ${currentSlot.slotId}`);
             ws.send(JSON.stringify({
                 type: "scan_result",
                 success: false,
-                message: "Please scan OUTSIDE unit first",
+                message: "Scan OUTSIDE Unit First",
                 role: "STUDENT",
                 status: 403,
                 user: userInfo

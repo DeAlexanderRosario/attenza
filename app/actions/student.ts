@@ -144,22 +144,85 @@ export async function updateStudentPassword(data: { current: string, new: string
     return { success: true, message: "Password updated successfully" }
 }
 
-export async function submitWordGuess(guess: string) {
+const DAILY_QUESTIONS = [
+    {
+        question: "What is the primary purpose of an Operating System?",
+        options: ["Hardware Management", "Video Editing", "Word Processing", "Social Media"],
+        correctIndex: 0,
+        hint: "It acts as an interface between user and hardware"
+    },
+    {
+        question: "Which data structure follows the Last-In-First-Out (LIFO) principle?",
+        options: ["Queue", "Stack", "Linked List", "Tree"],
+        correctIndex: 1,
+        hint: "Think of a pile of plates"
+    },
+    {
+        question: "What does HTML stand for?",
+        options: [
+            "HyperText Markup Language",
+            "HighText Machine Language",
+            "HyperText Mixing Language",
+            "Home Tool Markup Language"
+        ],
+        correctIndex: 0,
+        hint: "Standard language for web pages"
+    },
+    {
+        question: "Which of these is NOT a programming language?",
+        options: ["Python", "Java", "HTML", "C++"],
+        correctIndex: 2,
+        hint: "One is a markup language"
+    },
+    {
+        question: "In IP addresses, what does 'DNS' stand for?",
+        options: [
+            "Domain Name System",
+            "Digital Network Service",
+            "Data Name Server",
+            "Distributed Network Security"
+        ],
+        correctIndex: 0,
+        hint: "Translates names into IP addresses"
+    }
+]
+
+export async function getDailyQuestion() {
+    const student = await getCurrentStudent()
+    if (!student) return null
+
+    // Pick question based on day (0-30 modulo questions.length)
+    const day = new Date().getDate()
+    const index = day % DAILY_QUESTIONS.length
+    const q = DAILY_QUESTIONS[index]
+
+    return {
+        question: q.question,
+        options: q.options,
+        hint: q.hint
+    }
+}
+
+export async function submitGameAnswer(choiceIndex: number) {
     const student = await getCurrentStudent()
     if (!student) return { success: false, message: "Unauthorized" }
 
-    // Mock logic for "Algorithm" based on UI hint
-    const TARGET_WORD = "ALGORITHM"
+    const day = new Date().getDate()
+    const index = day % DAILY_QUESTIONS.length
+    const q = DAILY_QUESTIONS[index]
 
-    if (guess.toUpperCase().trim() === TARGET_WORD) {
-        // Award points?
-        // const db = await getDB()
-        // await db.collection("users").updateOne({ id: student.id }, { $inc: { points: 50 } })
+    if (choiceIndex === q.correctIndex) {
+        // Award 50 points
+        const db = await getDB()
+        await db.collection("users").updateOne(
+            { id: student.id },
+            { $inc: { points: 50 } }
+        )
 
-        return { success: true, message: "Correct! +50 Points" }
+        return { success: true, message: "Correct! +50 Points awarded." }
     }
 
-    return { success: false, message: "Incorrect, try again." }
+    return { success: false, message: "Incorrect. Try the hint!" }
 }
 
 

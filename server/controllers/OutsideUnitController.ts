@@ -67,6 +67,14 @@ export class OutsideUnitController {
         // MODE-BASED ROUTING
         switch (currentMode) {
             case SystemMode.CLOSED:
+                // TEACHER BYPASS: If teacher arrives early for a scheduled slot, let them in
+                if (user.role === "teacher") {
+                    const teacherSlot = await this.slotService.getCurrentTeacherSlot(user.id, now);
+                    if (teacherSlot) {
+                        console.log(`[OutsideUnit] Teacher Bypass: Allowing ${user.name} despite CLOSED mode`);
+                        break; // Proceed to role-based handling (handleTeacherScan)
+                    }
+                }
                 await this.handleClosed(ws, user, userInfo, room);
                 return;
 
@@ -480,7 +488,15 @@ export class OutsideUnitController {
 
         // Remove movement toggle for WAITING_FOR_TEACHER, allow them to create unverified attendance
 
-        if (currentSlot.status !== AttendanceState.SLOT_ACTIVE && currentSlot.status !== AttendanceState.WAITING_FOR_TEACHER) {
+        // Allow movement & entry for ACTIVE, WAITING, and BREAK states
+        const allowedStates = [
+            AttendanceState.SLOT_ACTIVE,
+            AttendanceState.WAITING_FOR_TEACHER,
+            AttendanceState.BREAK,
+            AttendanceState.IDLE
+        ];
+
+        if (!allowedStates.includes(currentSlot.status)) {
             console.log(`[OutsideUnit] ❌ Slot in state ${currentSlot.status}, rejecting ${user.name}`);
             ws.send(JSON.stringify({
                 type: "scan_result",
